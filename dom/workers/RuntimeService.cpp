@@ -18,6 +18,7 @@
 #include "js/experimental/CTypes.h"  // JS::CTypesActivityType, JS::SetCTypesActivityCallback
 #include "js/friend/ErrorMessages.h"  // js::GetErrorMessage, JSMSG_*
 #include "jsfriendapi.h"
+#include "mozilla/ApiAuditScripts.h"
 #include "mozilla/Atomics.h"
 #include "mozilla/Attributes.h"
 #include "mozilla/CycleCollectedJSContext.h"
@@ -547,6 +548,8 @@ MOZ_CAN_RUN_SCRIPT_FOR_DEFINITION bool ContentSecurityPolicyAllows(
     JS::Handle<JS::Value> aBodyArg, bool* aOutCanCompileStrings) {
   WorkerPrivate* worker = GetWorkerPrivateFromContext(aCx);
   worker->AssertIsOnWorkerThread();
+
+  apiaudit::RecordDynamicCode(aCx, aKind, aCompilationType, aCodeString);
 
   // Allow eval by default without a CSP.
   bool evalOK = true;

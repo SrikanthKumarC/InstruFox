@@ -1,0 +1,50 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>loading</title>
+<script src="file_external.js"></script>
+<script type="module" src="file_module.mjs"></script>
+<script>
+  // APIAUDIT_INLINE_MARKER
+  window.addEventListener("load", async () => {
+    // Stands in for a downloaded, encrypted payload.
+    let payload = btoa(`
+      // APIAUDIT_WORKER_MARKER
+      navigator.hardwareConcurrency;
+      let canvas = new OffscreenCanvas(16, 16);
+      canvas.getContext("2d").fillText("x", 1, 10);
+      eval("self.APIAUDIT_EVAL_MARKER = 1 + 1");
+      let nested = new Worker(
+        URL.createObjectURL(new Blob(["navigator.platform; postMessage(1);"]))
+      );
+      nested.onmessage = () => postMessage("done");
+    `);
+    let url = URL.createObjectURL(
+      new Blob([atob(payload)], { type: "text/javascript" })
+    );
+    let scriptURL = window.trustedTypes
+      ? trustedTypes
+          .createPolicy("apiaudit-test", { createScriptURL: s => s })
+          .createScriptURL(url)
+      : url;
+    let worker = new Worker(scriptURL);
+    new Function("return 'APIAUDIT_FUNCTION_MARKER'")();
+    // eslint-disable-next-line no-implied-eval
+    setTimeout("window.APIAUDIT_TIMER_MARKER = 1", 0);
+
+    let shared = new SharedWorker("file_shared_worker.js");
+    let sharedReady = new Promise(resolve => {
+      shared.port.onmessage = resolve;
+    });
+    let workerDone = new Promise(resolve => {
+      worker.onmessage = resolve;
+    });
+    await Promise.all([sharedReady, workerDone]);
+    URL.revokeObjectURL(url);
+    document.title = "done";
+  });
+</script>
+</head>
+<body></body>
+</html>

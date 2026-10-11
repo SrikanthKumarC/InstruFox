@@ -1,0 +1,26 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>loading</title>
+<script>
+  /* eslint-disable no-debugger */
+  // Typical DevTools traps: a debugger statement in a loop, one built at
+  // runtime, and a timing check that notices when execution was paused.
+  let trap = setInterval(function () {
+    debugger;
+  }, 50);
+  window.addEventListener("load", () => {
+    (function () {}).constructor("debugger")();
+    let start = performance.now();
+    debugger;
+    let paused = performance.now() - start > 1000;
+    setTimeout(() => {
+      clearInterval(trap);
+      document.title = paused ? "detected" : "done";
+    }, 300);
+  });
+</script>
+</head>
+<body></body>
+</html>

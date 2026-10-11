@@ -26,6 +26,7 @@
 #include "js/loader/ModuleLoadRequest.h"
 #include "js/loader/ModuleLoaderBase.h"
 #include "js/loader/ScriptLoadRequest.h"
+#include "mozilla/ApiAuditScripts.h"
 #include "mozilla/AppShutdown.h"
 #include "mozilla/Assertions.h"
 #include "mozilla/AsyncEventDispatcher.h"
@@ -4246,6 +4247,12 @@ nsresult ScriptLoader::EvaluateScript(nsIGlobalObject* aGlobalObject,
     if (script && JS::GetScriptPrivate(script).isUndefined()) {
       aRequest->FetchInfo()->AssociateWithScript(script);
     }
+
+    apiaudit::RecordCompiledScript(cx, aRequest->URI(),
+                                   aRequest->GetScriptLoadContext()->mIsInline
+                                       ? "inline-script"
+                                       : "script",
+                                   script);
 
     ExecuteCompiledScript(cx, script, erv);
   }

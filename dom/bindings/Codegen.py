@@ -9240,6 +9240,8 @@ class CGPerSignatureCall(CGThing):
         )
         cgThings = []
 
+        cgThings.append(self.apiAuditCall(descriptor, idlNode, getter, setter))
+
         deprecated = idlNode.getExtendedAttribute("Deprecated") or (
             idlNode.isStatic()
             and descriptor.interface.getExtendedAttribute("Deprecated")
@@ -9605,6 +9607,28 @@ class CGPerSignatureCall(CGThing):
             cgThings.append(CGGeneric(code))
 
         self.cgRoot = CGList(cgThings)
+
+    def apiAuditCall(self, descriptor, idlNode, getter, setter):
+        iface = descriptor.interface.identifier.name
+        if self.isConstructor:
+            name = "new %s()" % iface
+        else:
+            suffix = "=" if setter else "" if getter else "()"
+            name = "%s.%s%s" % (iface, idlNode.identifier.name, suffix)
+        if type(self) is CGPerSignatureCall and idlNode.isMethod():
+            call = 'mozilla::apiaudit::RecordMethod(cx, "%s", args);' % name
+        else:
+            call = 'mozilla::apiaudit::Record(cx, "%s");' % name
+        return CGGeneric(
+            fill(
+                """
+                if (MOZ_UNLIKELY(mozilla::apiaudit::IsEnabled())) {
+                  ${call}
+                }
+                """,
+                call=call,
+            )
+        )
 
     def getArgumentNames(self):
         return ["arg" + str(i) for i in range(len(self.arguments))]
@@ -19656,6 +19680,7 @@ class CGBindingRoot(CGThing):
         bindingHeaders["<type_traits>"] = hasCode
         bindingHeaders["mozilla/dom/BindingDeclarations.h"] = not hasCode and enums
 
+        bindingHeaders["mozilla/ApiAudit.h"] = descriptors
         bindingHeaders["WrapperFactory.h"] = descriptors
         bindingHeaders["mozilla/dom/DOMJSClass.h"] = descriptors
         bindingHeaders["mozilla/dom/ScriptSettings.h"] = dictionaries  # AutoJSAPI

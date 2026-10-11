@@ -16,6 +16,7 @@
 #include "jsapi.h"
 #include "jsfriendapi.h"
 #include "mozilla/AntiTrackingUtils.h"
+#include "mozilla/ApiAuditScripts.h"
 #include "mozilla/ArrayAlgorithm.h"
 #include "mozilla/Assertions.h"
 #include "mozilla/Encoding.h"
@@ -1251,6 +1252,13 @@ bool WorkerScriptLoader::EvaluateScript(JSContext* aCx,
   if (NS_FAILED(rv)) {
     mRv.StealExceptionFromJSContext(aCx);
     return false;
+  }
+
+  if (mWorkerScriptType == WorkerScript) {
+    apiaudit::RecordScriptSource(
+        aCx, aRequest->URI(),
+        loadContext->IsTopLevel() ? "worker-script" : "importScripts",
+        maybeSource);
   }
 
   if (!mWorkerRef->Private()->IsServiceWorker()) {

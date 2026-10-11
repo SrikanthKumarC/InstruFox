@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>loading</title>
+<script>
+  // Lets the test make calls from page script after the page has loaded.
+  window.probe = name => navigator[name];
+
+  window.addEventListener("load", async () => {
+    let canvas = document.createElement("canvas");
+    let ctx = canvas.getContext("2d");
+    ctx.fillText("fingerprint", 2, 10);
+    canvas.toDataURL();
+
+    let gl = document.createElement("canvas").getContext("webgl");
+    if (gl) {
+      gl.getExtension("WEBGL_debug_renderer_info");
+      gl.getParameter(37446);
+    }
+
+    navigator.hardwareConcurrency;
+    screen.width;
+    matchMedia("(prefers-color-scheme: dark)");
+
+    let audio = new OfflineAudioContext(1, 4410, 44100);
+    let osc = audio.createOscillator();
+    osc.connect(audio.destination);
+    osc.start();
+    let buffer = await audio.startRendering();
+    buffer.getChannelData(0);
+
+    document.title = "done";
+  });
+</script>
+</head>
+<body></body>
+</html>

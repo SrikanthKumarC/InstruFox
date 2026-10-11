@@ -2,6 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+#include "mozilla/ApiAuditScripts.h"
 #include "mozilla/Assertions.h"  // MOZ_ASSERT
 #include "mozilla/BasePrincipal.h"
 #include "mozilla/CycleCollectedJSContext.h"  // nsAutoMicroTask
@@ -1045,6 +1046,8 @@ nsresult ModuleLoaderBase::CreateModuleScript(ModuleLoadRequest* aRequest) {
     if (module) {
       RootedScript moduleScript(cx, GetModuleScript(module));
       if (moduleScript) {
+        mozilla::apiaudit::RecordCompiledScript(cx, aRequest->URI(), "module",
+                                                moduleScript);
         RootedValue privateValue(cx);
         InstantiateOptions instantiateOptions(options);
         if (!UpdateDebugMetadata(cx, moduleScript, instantiateOptions,

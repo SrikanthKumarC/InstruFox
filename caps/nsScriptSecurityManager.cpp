@@ -13,6 +13,7 @@
 #include "js/ColumnNumber.h"  // JS::ColumnNumberOneOrigin
 #include "js/GCVector.h"
 #include "js/Value.h"
+#include "mozilla/ApiAuditScripts.h"
 #include "mozilla/BasePrincipal.h"
 #include "mozilla/ClearOnShutdown.h"
 #include "mozilla/Components.h"
@@ -463,6 +464,9 @@ bool nsScriptSecurityManager::ContentSecurityPolicyPermitsJSAction(
     JS::Handle<JS::StackGCVector<JS::Value>> aParameterArgs,
     JS::Handle<JS::Value> aBodyArg, bool* aOutCanCompileStrings) {
   MOZ_ASSERT(cx == nsContentUtils::GetCurrentJSContext());
+
+  mozilla::apiaudit::RecordDynamicCode(cx, aKind, aCompilationType,
+                                       aCodeString);
 
   nsCOMPtr<nsIPrincipal> subjectPrincipal = nsContentUtils::SubjectPrincipal();
 

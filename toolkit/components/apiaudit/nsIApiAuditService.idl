@@ -1,0 +1,31 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "nsISupports.idl"
+
+/**
+ * Exposes the Web API calls recorded in the current process.
+ */
+[scriptable, builtinclass, uuid(714ff395-2bca-4ce9-884a-a14406008797)]
+interface nsIApiAuditService : nsISupports
+{
+  readonly attribute boolean enabled;
+
+  /**
+   * Returns {"windows": [{innerWindowId, topInnerWindowId, browserId, isTop,
+   * isWorker, url, origin, destroyedAt, contexts: [{serial, kind, url, name,
+   * parentUrl, firstSeen, apis: [{name, count, firstSeen, args, scripts}],
+   * code: [{kind, url, length, hash, truncated, count, firstSeen, text}]}]}]}
+   * for every window of this process. Shared and service workers appear as
+   * windows with isWorker set. Code text is only included if includeCode is
+   * true.
+   */
+  AUTF8String getRecordsJSON([optional] in boolean includeCode);
+
+  /**
+   * Forgets every recorded call and piece of code. Windows that are still
+   * alive keep their metadata.
+   */
+  void clear();
+};

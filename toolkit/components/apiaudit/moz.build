@@ -1,0 +1,44 @@
+# -*- Mode: python; indent-tabs-mode: nil; tab-width: 40 -*-
+# vim: set filetype=python:
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+with Files("**"):
+    BUG_COMPONENT = ("Core", "Privacy: Anti-Tracking")
+
+JAR_MANIFESTS += ["jar.mn"]
+
+XPIDL_SOURCES += ["nsIApiAuditService.idl"]
+
+XPIDL_MODULE = "toolkit_apiaudit"
+
+XPCOM_MANIFESTS += ["components.conf"]
+
+EXTRA_COMPONENTS += ["ApiAudit.manifest"]
+
+MOZ_SRC_FILES += [
+    "ApiAudit.sys.mjs",
+    "ApiAuditChild.sys.mjs",
+    "ApiAuditParent.sys.mjs",
+    "ApiAuditRanking.sys.mjs",
+]
+
+EXPORTS.mozilla += [
+    "ApiAudit.h",
+    "ApiAuditScripts.h",
+    "ApiAuditService.h",
+]
+
+UNIFIED_SOURCES += ["ApiAudit.cpp"]
+
+LOCAL_INCLUDES += [
+    "/dom/base",
+    "/js/xpconnect/src",
+]
+
+BROWSER_CHROME_MANIFESTS += ["tests/browser/browser.toml"]
+
+include("/ipc/chromium/chromium-config.mozbuild")
+
+FINAL_LIBRARY = "xul"

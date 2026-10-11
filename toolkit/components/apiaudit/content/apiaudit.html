@@ -1,0 +1,110 @@
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this file,
+   - You can obtain one at http://mozilla.org/MPL/2.0/. -->
+<!doctype html>
+<html windowtype="privacy:apiaudit">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; object-src 'none'; script-src chrome:; img-src chrome:; style-src chrome:;"
+    />
+    <title>API Audit</title>
+    <link
+      rel="stylesheet"
+      href="chrome://global/content/apiaudit/apiaudit.css"
+    />
+    <script
+      type="module"
+      src="chrome://global/content/apiaudit/apiaudit.mjs"
+    ></script>
+  </head>
+  <body>
+    <header>
+      <h1>API Audit</h1>
+      <div id="session-controls">
+        <button
+          id="start"
+          title="Forget everything recorded so far and record from now on"
+        >
+          Start
+        </button>
+        <button id="stop" title="Stop recording and keep what was recorded">
+          Stop
+        </button>
+        <button id="resume" title="Continue the stopped session">Resume</button>
+        <span id="session"></span>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="live" checked /> Live refresh
+      </label>
+      <input
+        type="search"
+        id="filter"
+        placeholder="Filter APIs, origins, scripts"
+      />
+      <label class="threshold">
+        Min score
+        <input
+          type="range"
+          id="min-score"
+          min="0"
+          max="100"
+          step="5"
+          value="30"
+        />
+        <output id="min-score-value">30</output>
+      </label>
+      <button id="refresh">Refresh</button>
+      <button
+        id="copy-summary"
+        title="Copy a Markdown summary of every API call in the selection"
+      >
+        Copy summary
+      </button>
+      <button
+        id="copy-all"
+        title="Copy the full report, including all captured code, as JSON"
+      >
+        Copy all
+      </button>
+      <button id="export">Export JSON</button>
+      <button id="clear">Clear</button>
+    </header>
+    <main>
+      <nav>
+        <h2>Tabs &amp; sites</h2>
+        <ul id="pages"></ul>
+      </nav>
+      <section>
+        <div id="page-summary"></div>
+        <div id="categories"></div>
+        <div id="views">
+          <button data-view="apis">APIs</button>
+          <button data-view="code" id="view-code">Code</button>
+        </div>
+        <div class="table-wrap" id="apis-view">
+          <table>
+            <thead>
+              <tr>
+                <th data-sort="score" class="num">Score</th>
+                <th data-sort="category">Category</th>
+                <th data-sort="name">API</th>
+                <th data-sort="count" class="num">Calls</th>
+                <th>Contexts</th>
+                <th>Arguments</th>
+                <th>Callers</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+        <div class="table-wrap" id="code-view" hidden>
+          <div id="code-list"></div>
+        </div>
+        <p id="status"></p>
+      </section>
+    </main>
+  </body>
+</html>

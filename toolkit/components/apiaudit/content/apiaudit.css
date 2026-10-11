@@ -1,0 +1,422 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+/* Standalone window without the design system stylesheets. */
+/* stylelint-disable stylelint-plugin-mozilla/use-design-tokens */
+
+:root {
+  color-scheme: light dark;
+  --bg: light-dark(#f9f9fb, #1c1b22);
+  --surface: light-dark(#ffffff, #2b2a33);
+  --text: light-dark(#15141a, #fbfbfe);
+  --muted: light-dark(#5b5b66, #bfbfc9);
+  --border: light-dark(#cfcfd8, #52525e);
+  --accent: light-dark(#0061e0, #00ddff);
+  --selected: light-dark(#e0e9ff, #3a3944);
+  --risk-critical: light-dark(#c50042, #ff6a75);
+  --risk-high: light-dark(#cc5500, #ffb066);
+  --risk-medium: light-dark(#8a6d00, #ffe066);
+  --risk-low: light-dark(#5b5b66, #8f8f9d);
+  --third-party: light-dark(#7542e5, #ab71ff);
+  font: message-box;
+  font-size: 13px;
+}
+
+body {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+}
+
+header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+h1 {
+  font-size: 15px;
+  margin: 0 8px 0 0;
+}
+
+h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 10px 12px 6px;
+}
+
+#filter {
+  flex: 1;
+  min-width: 180px;
+}
+
+.threshold {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#min-score-value {
+  width: 2.5em;
+  font-variant-numeric: tabular-nums;
+}
+
+main {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+nav {
+  width: 340px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-inline-end: 1px solid var(--border);
+  background: var(--surface);
+}
+
+#pages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+#pages li {
+  display: grid;
+  grid-template-columns: 12px auto 1fr;
+  gap: 2px 6px;
+  padding: 5px 8px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+}
+
+#pages li.node-all,
+#pages li.node-group {
+  font-weight: 600;
+}
+
+#pages li.node-group:not(:first-child) {
+  border-top: 2px solid var(--border);
+}
+
+#pages li.node-frame,
+#pages li.node-worker {
+  font-size: 12px;
+}
+
+#pages li.selected {
+  background: var(--selected);
+}
+
+#pages li.closed .page-title {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+#pages .twisty {
+  grid-row: span 2;
+  align-self: center;
+  color: var(--muted);
+}
+
+#pages .badge {
+  grid-row: span 2;
+  align-self: center;
+}
+
+.page-url {
+  font-weight: normal;
+}
+
+.page-title,
+.page-url {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.page-url {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+#page-summary {
+  padding: 8px 12px 0;
+  font-weight: 600;
+}
+
+#categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px;
+}
+
+.chip {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2px 10px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.chip.active {
+  border-color: var(--accent);
+  outline: 1px solid var(--accent);
+}
+
+.table-wrap {
+  flex: 1;
+  overflow: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  text-align: start;
+  border-bottom: 1px solid var(--border);
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+th[data-sort] {
+  cursor: pointer;
+}
+
+th.sorted::after {
+  content: " \25BE";
+}
+
+td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+tr.expanded td {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+tr:not(.expanded) td {
+  white-space: nowrap;
+}
+
+tbody tr {
+  cursor: pointer;
+}
+
+.num {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.api {
+  font-family: monospace;
+}
+
+.kind {
+  color: var(--muted);
+  font-size: 11px;
+  margin-inline-start: 4px;
+}
+
+.badge {
+  display: inline-block;
+  min-width: 2.2em;
+  text-align: center;
+  border-radius: 4px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--surface);
+  background: var(--risk-low);
+}
+
+.risk-critical {
+  background: var(--risk-critical);
+}
+
+.risk-high {
+  background: var(--risk-high);
+}
+
+.risk-medium {
+  background: var(--risk-medium);
+}
+
+.tp {
+  color: var(--third-party);
+  font-weight: 600;
+}
+
+.reason {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+#status {
+  margin: 0;
+  padding: 4px 12px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+}
+
+.hidden-src {
+  color: var(--risk-high);
+  font-weight: 600;
+}
+
+.worker {
+  color: var(--accent);
+}
+
+#views {
+  display: flex;
+  gap: 4px;
+  padding: 0 12px 8px;
+}
+
+#views button.active {
+  border-color: var(--accent);
+  outline: 1px solid var(--accent);
+}
+
+#code-list details {
+  border-bottom: 1px solid var(--border);
+  padding: 4px 12px;
+}
+
+#code-list details.hidden {
+  border-inline-start: 3px solid var(--risk-high);
+}
+
+#code-list summary {
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+}
+
+.code-kind {
+  font-family: monospace;
+  font-weight: 700;
+}
+
+.code-meta,
+.code-context {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.code-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0;
+}
+
+.code-body pre {
+  margin: 0;
+  max-height: 60vh;
+  overflow: auto;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: text;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+tr.has-code .api::after {
+  content: " \25B8 code";
+  color: var(--accent);
+  font-size: 11px;
+}
+
+tr.has-code.expanded .api::after {
+  content: " \25BE code";
+}
+
+tr.code-row,
+tr.code-row td {
+  cursor: auto;
+  white-space: normal;
+  max-width: none;
+}
+
+.code-entry {
+  margin: 4px 0 10px;
+  padding-inline-start: 8px;
+  border-inline-start: 3px solid var(--border);
+}
+
+.code-entry.hidden {
+  border-inline-start-color: var(--risk-high);
+}
+
+.code-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+}
+
+#session-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#session {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+#session.recording {
+  color: var(--text);
+}
+
+#session.recording::before {
+  content: "\25CF ";
+  color: var(--risk-critical);
+}
+
+.anti-debug {
+  color: var(--surface);
+  background: var(--risk-critical);
+  border-radius: 4px;
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 700;
+}
