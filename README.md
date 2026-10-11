@@ -72,9 +72,9 @@ is open. InstruFox counters the common tricks:
 You can turn all of this off with the `privacy.apiaudit.hideDevTools`
 preference.
 
-## Install (Linux x86_64)
+## Install
 
-Download `InstruFox-<version>-linux-x86_64.tar.xz` from the
+On Linux x86_64, download `InstruFox-<version>-linux-x86_64.tar.xz` from the
 [Releases](https://github.com/SrikanthKumarC/InstruFox/releases) page, then
 run:
 
@@ -91,9 +91,20 @@ a throwaway profile instead:
 ./instrufox/instrufox --profile "$(mktemp -d)"
 ```
 
-It needs the same system libraries as Firefox, such as GTK 3. Only Linux
-x86_64 builds are available for now. InstruFox doesn't update itself; check
-the Releases page for new versions.
+It needs the same system libraries as Firefox, such as GTK 3. InstruFox
+doesn't update itself; check the Releases page for new versions.
+
+### Supported platforms
+
+| Platform | Status |
+| --- | --- |
+| Linux x86_64 | Available |
+| Linux ARM64 | Coming soon |
+| Windows x86_64 | Coming soon |
+| Windows ARM64 | Coming soon |
+
+To hear when a new platform is available, watch this repository and choose
+*Custom > Releases*.
 
 ## Getting started
 
