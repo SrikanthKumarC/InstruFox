@@ -22,6 +22,7 @@ export const CATEGORIES = {
   network: "Network / WebRTC leaks",
   storage: "Storage & identifiers",
   permissions: "Permission probing",
+  crypto: "Crypto & hashing",
   timing: "Timing side channels",
   css: "Media queries & styles",
   clipboard: "Clipboard & input",
@@ -46,7 +47,13 @@ const RULES = [
   [`${CANVAS2D}\\.measureText`, "fonts", 60],
   ["TextMetrics\\..*", "fonts", 55],
   [`${CANVAS2D}\\.(?:fillText|strokeText)`, "canvas", 45],
+  [`${CANVAS2D}\\.font=`, "fonts", 40],
   [`${CANVAS2D}\\.globalCompositeOperation=?`, "canvas", 35],
+  [
+    `${CANVAS2D}\\.(?:fillStyle|strokeStyle|shadowBlur|shadowColor)=`,
+    "canvas",
+    25,
+  ],
   ["HTMLCanvasElement\\.getContext", "canvas", 30],
   ["OffscreenCanvas\\.(?:getContext|constructor)", "canvas", 40],
 
@@ -90,6 +97,7 @@ const RULES = [
     45,
   ],
   ["AudioContext\\.constructor", "audio", 35],
+  ["OscillatorNode\\.(?:type|frequency|detune)=?", "audio", 40],
 
   // Fonts
   ["Window\\.queryLocalFonts", "fonts", 95],
@@ -98,6 +106,7 @@ const RULES = [
   ["Document\\.fonts", "fonts", 35],
   ["FontFace\\.constructor", "fonts", 35],
   ["Range\\.(?:getClientRects|getBoundingClientRect)", "fonts", 40],
+  ["Element\\.(?:getBoundingClientRect|getClientRects)", "fonts", 25],
   ["HTMLElement\\.(?:offsetWidth|offsetHeight)", "fonts", 15],
 
   // Device & browser properties
@@ -118,6 +127,7 @@ const RULES = [
   ["Navigator\\.(?:userAgentData|keyboard)", "hardware", 60],
   ["Navigator\\.(?:getGamepads)", "hardware", 70],
   ["Gamepad\\..*", "hardware", 55],
+  ["Navigator\\.vibrate", "hardware", 25],
   [
     "Navigator\\.(?:userAgent|appVersion|appName|appCodeName|product)",
     "hardware",
@@ -148,6 +158,12 @@ const RULES = [
   ],
   ["Window\\.screen", "screen", 30],
   ["Window\\.(?:innerWidth|innerHeight)", "screen", 25],
+  [
+    "Window\\.(?:scrollbars|menubar|personalbar|statusbar|toolbar|locationbar)",
+    "screen",
+    40,
+  ],
+  ["BarProp\\.visible", "screen", 40],
   ["VisualViewport\\..*", "screen", 25],
 
   // Media devices & codecs
@@ -180,6 +196,8 @@ const RULES = [
     "sensors",
     80,
   ],
+  ["XRSystem\\.(?:isSessionSupported|supportsSession)", "sensors", 65],
+  ["Navigator\\.xr", "sensors", 55],
 
   // Network / WebRTC
   ["RTCIceCandidate\\..*", "network", 90],
@@ -199,6 +217,13 @@ const RULES = [
   ["Navigator\\.sendBeacon", "network", 55],
   ["WebSocket\\.constructor", "network", 25],
   ["WebTransport\\.constructor", "network", 30],
+  ["XMLHttpRequest\\.(?:open|send)", "network", 25],
+  ["EventSource\\.constructor", "network", 25],
+  [
+    "(?:Window|WorkerGlobalScope|DedicatedWorkerGlobalScope|SharedWorkerGlobalScope|ServiceWorkerGlobalScope)\\.fetch",
+    "network",
+    20,
+  ],
 
   // Storage & identifiers
   ["Document\\.cookie=", "storage", 70],
@@ -232,6 +257,16 @@ const RULES = [
   ["Notification\\.requestPermission", "permissions", 50],
   ["PermissionStatus\\.state", "permissions", 50],
 
+  // Crypto & hashing
+  [
+    "SubtleCrypto\\.(?:digest|sign|verify|deriveBits|deriveKey|exportKey)",
+    "crypto",
+    40,
+  ],
+  ["SubtleCrypto\\..*", "crypto", 25],
+  ["Crypto\\.randomUUID", "crypto", 45],
+  ["Crypto\\.getRandomValues", "crypto", 25],
+
   // Timing
   [
     "Performance\\.(?:getEntries|getEntriesByType|getEntriesByName)",
@@ -260,6 +295,7 @@ const RULES = [
   // Navigation & referrer
   ["Document\\.referrer", "navigation", 40],
   ["History\\.length", "navigation", 40],
+  ["History\\.(?:pushState|replaceState|state)", "navigation", 25],
   ["Document\\.(?:lastModified|domain)", "navigation", 25],
   ["Window\\.opener", "navigation", 25],
   ["Window\\.(?:top|parent|frameElement)", "navigation", 10],
