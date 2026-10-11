@@ -34,6 +34,13 @@ loader.lazyRequireGetter(
   true
 );
 
+loader.lazyRequireGetter(
+  this,
+  "executeSoon",
+  "resource://devtools/shared/DevToolsUtils.js",
+  true
+);
+
 /**
  * Start watching for all console messages related to a given Target Actor.
  * This will notify about existing console messages, but also the one created in future.
@@ -46,13 +53,40 @@ loader.lazyRequireGetter(
  *          This will be called for each resource.
  */
 class ConsoleMessageWatcher {
+  pendingMessages = null;
+
+  flushPendingMessages = () => {
+    if (!this.listener || !this.pendingMessages?.length) {
+      return;
+    }
+    const entries = this.pendingMessages;
+    this.pendingMessages = [];
+    this.onAvailable(
+      entries.map(({ message, argumentsAreRawObjects }) =>
+        prepareConsoleMessageForRemote(
+          this.targetActor,
+          message,
+          argumentsAreRawObjects
+        )
+      )
+    );
+  };
+
   async watch(targetActor, { onAvailable }) {
     this.targetActor = targetActor;
     this.onAvailable = onAvailable;
+    this.pendingMessages = [];
 
     // Bug 1642297: Maybe we could merge ConsoleAPI Listener into this module?
     const onConsoleAPICall = message => {
-      onAvailable([prepareConsoleMessageForRemote(targetActor, message)]);
+      // Serialize the message in a later event loop turn instead of
+      // synchronously within the console call: grip creation (and for
+      // console.table, enumeration of the first argument) is expensive
+      // enough that pages time console.log/console.table to detect DevTools.
+      this.pendingMessages.push({ message });
+      if (this.pendingMessages.length == 1) {
+        executeSoon(this.flushPendingMessages);
+      }
     };
 
     const isTargetActorContentProcess =
@@ -122,6 +156,7 @@ class ConsoleMessageWatcher {
       this.listener.destroy();
       this.listener = null;
     }
+    this.pendingMessages = null;
     this.targetActor = null;
     this.onAvailable = null;
   }
@@ -140,19 +175,19 @@ class ConsoleMessageWatcher {
     if (!this.listener) {
       throw new Error("This target actor isn't listening to console messages");
     }
-    this.onAvailable(
-      messages.map(message => {
-        if (!message.timeStamp) {
-          throw new Error("timeStamp property is mandatory");
-        }
+    for (const message of messages) {
+      if (!message.timeStamp) {
+        throw new Error("timeStamp property is mandatory");
+      }
+    }
 
-        return prepareConsoleMessageForRemote(
-          this.targetActor,
-          message,
-          argumentsAreRawObjects
-        );
-      })
+    // Emit DevTools-generated messages immediately, after any message queued
+    // by a page console call so that their relative order is preserved. This
+    // runs while the target is paused or traced, so the page cannot time it.
+    this.pendingMessages.push(
+      ...messages.map(message => ({ message, argumentsAreRawObjects }))
     );
+    this.flushPendingMessages();
   }
 }
 

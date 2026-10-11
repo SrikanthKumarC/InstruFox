@@ -1,6 +1,7 @@
 [DEFAULT]
 support-files = [
   "file_antidebug.html",
+  "file_antidebug_console.html",
   "file_blob_worker.html",
   "file_external.js",
   "file_fingerprint.html",

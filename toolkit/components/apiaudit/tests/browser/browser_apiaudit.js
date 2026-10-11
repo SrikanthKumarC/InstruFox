@@ -612,3 +612,49 @@ add_task(async function test_debugger_traps() {
     await toolbox.destroy();
   });
 });
+
+add_task(async function test_console_timing_trap() {
+  const { require } = ChromeUtils.importESModule(
+    "resource://devtools/shared/loader/Loader.sys.mjs"
+  );
+  const { gDevTools } = require("devtools/client/framework/devtools");
+  registerCleanupFunction(() => {
+    Services.prefs.clearUserPref("devtools.everOpened");
+    Services.prefs.clearUserPref("devtools.toolbox.selectedTool");
+  });
+  await BrowserTestUtils.withNewTab("about:blank", async browser => {
+    let tab = gBrowser.getTabForBrowser(browser);
+    let toolbox = await gDevTools.showToolboxForTab(tab, {
+      toolId: "webconsole",
+    });
+
+    let webconsole = toolbox.getPanel("webconsole");
+    const markerPromise = new Promise(resolve => {
+      webconsole.hud.ui.on("new-messages", function onNewMessages(messages) {
+        for (const message of messages) {
+          if (message.node.textContent.includes("console-timing-marker")) {
+            webconsole.hud.ui.off("new-messages", onNewMessages);
+            resolve();
+            return;
+          }
+        }
+      });
+    });
+
+    await loadAndCollect(browser, TEST_ROOT + "file_antidebug_console.html");
+    is(browser.contentTitle, "done", "The page ran through its trap");
+    await markerPromise;
+    ok(true, "DevTools still receives console calls made while it was open");
+
+    let minMs = await SpecialPowers.spawn(browser, [], () => {
+      return content.wrappedJSObject.consoleMinMs;
+    });
+    info(`Fastest console.table call with DevTools open: ${minMs}ms`);
+    Assert.less(
+      minMs,
+      10,
+      "console.table does not serialize synchronously with DevTools open"
+    );
+    await toolbox.destroy();
+  });
+});

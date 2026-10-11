@@ -3,19 +3,30 @@
 
 "use strict";
 
-// Check that calling console.table on a variable which is modified after the
-// console.table call only shows data for when the variable was logged.
+// Check how console.table reacts to a variable being modified around the
+// console.table calls. Console messages are serialized in a later event
+// loop turn than the call itself, so that the page-visible cost of a
+// console call does not depend on DevTools being open. A mutation that
+// happens in the same task as the call therefore shows up in the table,
+// while a mutation that happens after the table was serialized does not.
 
 const TEST_URI = `data:text/html,<!DOCTYPE html>Test console.table with modified variable`;
 
 add_task(async function () {
   const hud = await openNewTabAndConsole(TEST_URI);
 
-  await SpecialPowers.spawn(gBrowser.selectedBrowser, [], () => {
+  await SpecialPowers.spawn(gBrowser.selectedBrowser, [], async () => {
     const x = ["a", "b"];
     content.wrappedJSObject.console.table(x);
+    // Mutating in the same task as the call is visible once the messages of
+    // this task are serialized: both tables show [a, b, c].
     x.push("c");
     content.wrappedJSObject.console.table(x);
+    // Task boundary: the two messages are serialized during the wait.
+    // eslint-disable-next-line mozilla/no-arbitrary-setTimeout
+    await new Promise(resolve =>
+      content.wrappedJSObject.setTimeout(resolve, 0)
+    );
     x.sort((a, b) => {
       if (a < b) {
         return 1;
@@ -40,6 +51,7 @@ add_task(async function () {
   checkTable(table1, [
     [0, "a"],
     [1, "b"],
+    [2, "c"],
   ]);
 
   info("Check the rows of the table after adding an element to the array");
@@ -49,7 +61,7 @@ add_task(async function () {
     [2, "c"],
   ]);
 
-  info("Check the rows of the table after sorting the array");
+  info("Check the rows of the table after sorting the array in another task");
   checkTable(table3, [
     [0, "c"],
     [1, "b"],

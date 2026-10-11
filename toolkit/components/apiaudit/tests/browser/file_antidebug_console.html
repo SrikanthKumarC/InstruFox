@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>loading</title>
+<script>
+  // DevTools trap: while DevTools is open, every console call serializes its
+  // arguments (and console.table enumerates the first argument's properties
+  // and sub-properties), so pages time how long console calls take to
+  // detect DevTools. Serialization must not run synchronously inside the
+  // call, whatever its argument size.
+  window.addEventListener("load", () => {
+    console.log("console-timing-marker");
+    const big = [];
+    for (let i = 0; i < 100000; i++) {
+      big.push("item" + i);
+    }
+    let min = Infinity;
+    for (let i = 0; i < 5; i++) {
+      const start = performance.now();
+      console.table(big);
+      min = Math.min(min, performance.now() - start);
+    }
+    window.consoleMinMs = min;
+    setTimeout(() => {
+      document.title = "done";
+    }, 300);
+  });
+</script>
+</head>
+<body></body>
+</html>

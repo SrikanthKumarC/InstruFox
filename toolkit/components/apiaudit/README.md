@@ -24,6 +24,11 @@ Everything lives in this directory except:
   `RecordDynamicCode` call each, which captures strings compiled by `eval()`
   and `Function()` and logs WebAssembly compilation, on the main thread and in
   workers.
+- `devtools/server/actors/resources/console-messages.js`
+  (`ConsoleMessageWatcher`): page console calls no longer serialize their
+  arguments synchronously within the call; the serialization is deferred to
+  a later event loop turn, so timing `console.log`/`console.table` no
+  longer reveals whether DevTools is open.
 - `toolkit/components/moz.build`: adds `apiaudit` to `DIRS`.
 
 When rebasing onto a newer mozilla-central, only those lines can conflict.
@@ -94,6 +99,17 @@ Captured code that contains a `debugger` statement is flagged
 (ranked 85) is recorded with the kind and URL of that code as its argument.
 The check is textual, so the word inside a string or comment also matches.
 
+Pages also detect DevTools by timing `console.log`/`console.table`: with
+DevTools open, every console call used to serialize its arguments (and
+`console.table` enumerate the first argument's properties and
+sub-properties) synchronously inside the call. That serialization now runs
+in a later event loop turn, so the page-visible cost of a console call is
+the same whether or not DevTools is attached (messages still reach the
+console, one task later). The price is that mutations made in the same
+task as a console call show up in the serialized message; `console.table`
+on an object that changes keeps showing the state of the last task before
+the message was serialized.
+
 ## Not covered
 
 APIs that are not WebIDL members: JS built-ins (`Intl`, `Date`), CSS media
@@ -102,5 +118,11 @@ HTTP headers. Attribute reads that the JIT serves from a cached slot
 (`[StoreInSlot]`/`[Cached]`) are only recorded on the first read. Event
 handler attributes (`onclick="..."`), `javascript:` URLs and WebAssembly
 module bytes are not captured. A shared worker started with a URL that the
-page computed without passing a string, `URL` or `TrustedScriptURL` cannot be
-linked and stays a separate entry.
+page computed without passing a string, `URL` or `TrustedScriptURL` cannot
+be linked and stays a separate entry.
+
+DevTools detection not covered: the deferred console serialization still
+runs on the target thread, so a page measuring event-loop lag (for example
+with `setTimeout` drift) while spamming heavy console calls can still see
+DevTools. Likewise the general slowdown of a page the Debugger is attached
+to (JIT deopt, slower allocation) is not equalized.
