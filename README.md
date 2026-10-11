@@ -37,10 +37,12 @@ Anyone who needs to see what a page actually does, not what it claims to do:
 - **Web measurement studies**: export a complete, structured report per page
   to compare sites, browsers or versions of a page.
 
-> **Privacy note:** InstruFox records request and response headers, request
-> bodies, cookies and argument values, which can include passwords, tokens and
-> other personal data. Don't browse with your personal accounts in it, and
-> check reports before you share them.
+> **Your data stays on your computer.** InstruFox doesn't send what it
+> records anywhere. Recordings are kept in memory and are gone when you
+> click **Clear** or close the browser; they are only saved to a file when
+> you export them. Keep in mind that a report can include cookies, request
+> headers and form data from the pages you visited, so check it before you
+> share it.
 
 ## What it records
 
