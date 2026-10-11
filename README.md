@@ -7,8 +7,10 @@ workers), the CSS conditions it probes, and every network request and cookie
 it produces. Results are grouped by tab, frame and worker, ranked by privacy
 risk, and can be exported as JSON or Markdown.
 
-InstruFox is built on the Firefox source code. It is an independent project,
-not affiliated with or endorsed by Mozilla.
+InstruFox is built on the Firefox source code and is updated with the latest
+Firefox changes every week, so it keeps up with new web platform features,
+bug fixes and security fixes. It is an independent project, not affiliated
+with or endorsed by Mozilla.
 
 ## Who it's for
 
@@ -146,8 +148,13 @@ To also get a plain-text log in the terminal, start InstruFox with
 ## Building from source
 
 InstruFox is a fork of
-[mozilla-firefox/firefox](https://github.com/mozilla-firefox/firefox), and
-builds the same way as Firefox. See the
+[mozilla-firefox/firefox](https://github.com/mozilla-firefox/firefox). Every
+week, the InstruFox changes are rebased onto the latest Firefox `main`
+branch, so the history of `main` here is rewritten when that happens. If you
+work from a clone, update it with `git pull --rebase`, and base pull requests
+on the current `main`.
+
+InstruFox builds the same way as Firefox. See the
 [Firefox build documentation](https://firefox-source-docs.mozilla.org/setup/index.html)
 for system requirements. In a clone of this repository:
 
