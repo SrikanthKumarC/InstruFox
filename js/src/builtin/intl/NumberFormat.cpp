@@ -42,6 +42,7 @@
 #include "js/TypeDecls.h"
 #include "util/Text.h"
 #include "vm/BigIntType.h"
+#include "vm/BuiltinAudit.h"
 #include "vm/GlobalObject.h"
 #include "vm/JSContext.h"
 #include "vm/PlainObject.h"  // js::PlainObject
@@ -95,8 +96,10 @@ static const JSFunctionSpec numberFormat_static_methods[] = {
     JS_FS_END,
 };
 
+static constexpr char kAudit_Intl_NumberFormat_resolvedOptions[] = "Intl.NumberFormat.resolvedOptions()";
+
 static const JSFunctionSpec numberFormat_methods[] = {
-    JS_FN("resolvedOptions", numberFormat_resolvedOptions, 0, 0),
+    JS_FN("resolvedOptions", (AuditedNative<numberFormat_resolvedOptions, kAudit_Intl_NumberFormat_resolvedOptions>), 0, 0),
     JS_FN("formatToParts", numberFormat_formatToParts, 1, 0),
     JS_FN("formatRange", numberFormat_formatRange, 2, 0),
     JS_FN("formatRangeToParts", numberFormat_formatRangeToParts, 2, 0),

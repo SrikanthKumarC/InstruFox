@@ -44,6 +44,10 @@ class WorkerDescriptorFront extends DescriptorMixin(
     this.traits = json.traits;
   }
 
+  get isTerminated() {
+    return !!this.traits?.isTerminated;
+  }
+
   get name() {
     // this._url is nullified in TargetMixin#destroy.
     if (!this.url) {

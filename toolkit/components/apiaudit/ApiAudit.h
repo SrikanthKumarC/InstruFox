@@ -10,10 +10,12 @@
 #include "js/TypeDecls.h"
 #include "js/Value.h"
 #include "mozilla/Atomics.h"
+#include "nsStringFwd.h"
 
 // Records every WebIDL member invoked by web content. The WebIDL bindings
-// generator emits a call to Record/RecordMethod at the start of each
-// generated method, getter, setter and constructor.
+// generator emits one of the recorders below at the start of each generated
+// method, getter, setter, constructor and named or indexed property
+// operation.
 namespace mozilla::apiaudit {
 
 enum class State : uint32_t { Uninitialized, Disabled, Enabled };
@@ -27,15 +29,78 @@ inline bool IsEnabled() {
   return s == State::Enabled || (s == State::Uninitialized && InitSlow());
 }
 
-// aName must be a string literal; it is stored without being copied.
-void Record(JSContext* aCx, const char* aName);
-void RecordWithArg(JSContext* aCx, const char* aName,
-                   JS::Handle<JS::Value> aArg);
+// Number of arguments described for each sampled call.
+static constexpr unsigned kMaxCallArgs = 8;
+
+// A sampled call whose arguments and result are recorded once it returns.
+struct CallSample;
+
+// Counts a call to aName (a string literal, stored without being copied) and
+// records its first argument. Returns the sample to pass to EndCall once the
+// call returns, or null if this call is not sampled.
+CallSample* BeginCall(JSContext* aCx, const char* aName,
+                      JS::Handle<JS::Value> aFirstArg, bool aHasArg);
+void AddCallArg(CallSample* aSample, JS::Handle<JS::Value> aArg);
+// Records the arguments added so far and aResult (when aHasResult), or the
+// pending exception, then frees aSample.
+void EndCall(CallSample* aSample, JS::Handle<JS::Value> aResult,
+             bool aHasResult);
+
+void RecordSetter(JSContext* aCx, const char* aName,
+                  JS::Handle<JS::Value> aValue);
+
+// Named and indexed property operations. aValue is the value being assigned,
+// or undefined for getters and deleters.
+void RecordKey(JSContext* aCx, const char* aName, uint32_t aIndex,
+               JS::Handle<JS::Value> aValue);
+void RecordKey(JSContext* aCx, const char* aName, const nsAString& aKey,
+               JS::Handle<JS::Value> aValue);
+
+// Records a method or constructor call with its arguments and return value.
+// Arguments are described after the call so that typed arrays the callee
+// fills in (getFloatFrequencyData(), readPixels()) show their new contents.
+template <typename Args>
+class MOZ_RAII AutoRecordMethod {
+ public:
+  AutoRecordMethod(JSContext* aCx, const char* aName, const Args& aArgs)
+      : mArgs(aArgs),
+        mSample(IsEnabled() ? BeginCall(aCx, aName, aArgs.get(0),
+                                        aArgs.length() > 0)
+                            : nullptr) {}
+
+  ~AutoRecordMethod() {
+    if (mSample) {
+      for (unsigned i = 0; i < mArgs.length() && i < kMaxCallArgs; i++) {
+        AddCallArg(mSample, mArgs.get(i));
+      }
+      EndCall(mSample, mArgs.rval(), true);
+    }
+  }
+
+ private:
+  const Args& mArgs;
+  CallSample* mSample;
+};
 
 template <typename Args>
-inline void RecordMethod(JSContext* aCx, const char* aName, const Args& aArgs) {
-  RecordWithArg(aCx, aName, aArgs.get(0));
-}
+class MOZ_RAII AutoRecordGetter {
+ public:
+  AutoRecordGetter(JSContext* aCx, const char* aName, Args& aArgs)
+      : mArgs(aArgs),
+        mSample(IsEnabled()
+                    ? BeginCall(aCx, aName, JS::UndefinedHandleValue, false)
+                    : nullptr) {}
+
+  ~AutoRecordGetter() {
+    if (mSample) {
+      EndCall(mSample, mArgs.rval(), true);
+    }
+  }
+
+ private:
+  Args& mArgs;
+  CallSample* mSample;
+};
 
 }  // namespace mozilla::apiaudit
 

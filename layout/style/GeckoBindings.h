@@ -574,6 +574,16 @@ bool Gecko_IsMainThread();
 // Returns true if we're currently on a DOM worker thread.
 bool Gecko_IsDOMWorkerThread();
 
+// API Audit of the conditions of author stylesheets.
+bool Gecko_ApiAudit_IsEnabled();
+// aKind: 0 for @media, 1 for @supports, 2 for @import media, 3 for the media
+// list of the stylesheet itself.
+void Gecko_ApiAudit_RecordStyleCondition(const mozilla::dom::Document*,
+                                         uint8_t aKind,
+                                         const nsACString* aCondition,
+                                         bool aMatches,
+                                         mozilla::URLExtraData* aURLData);
+
 // Returns the preferred number of style threads to use, or -1 for no
 // preference.
 int32_t Gecko_GetNumStyleThreads();

@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>loading</title>
+<style>
+  @media (min-resolution: 2dppx) {
+    body { color: red; }
+  }
+  @supports (display: grid) {
+    body { display: block; }
+  }
+  @font-face {
+    font-family: apiaudit-probe;
+    src: local("ApiAudit No Such Font");
+  }
+</style>
+<script>
+  window.addEventListener("load", async () => {
+    let ctx = document.createElement("canvas").getContext("2d");
+    ctx.fillText("hello", 2, 10);
+
+    document.cookie = "apiaudit=1";
+
+    crypto.getRandomValues(new Uint8Array(4));
+
+    await navigator.storage.estimate();
+
+    for (let i = 0; i < 3; i++) {
+      navigator.languages;
+    }
+
+    localStorage.apiauditKey = "stored";
+    localStorage.apiauditKey;
+
+    new Date().getTimezoneOffset();
+    Intl.DateTimeFormat().resolvedOptions();
+    Math.tan(-1e300);
+
+    new WebAssembly.Module(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
+
+    document.getElementById("handler").click();
+    document.getElementById("jsurl").click();
+    await new Promise(resolve => {
+      let check = () => (window.jsurlRan ? resolve() : setTimeout(check, 10));
+      check();
+    });
+
+    getComputedStyle(document.body).color;
+    await document.fonts.load("12px apiaudit-probe").catch(() => {});
+
+    await fetch("file_capture.html?beacon", {
+      method: "POST",
+      body: "apiaudit-body",
+    });
+
+    document.title = "done";
+  });
+</script>
+</head>
+<body>
+<div id="handler" onclick="window.handlerRan = 1"></div>
+<a id="jsurl" href="javascript:void(window.jsurlRan = 1)">run</a>
+</body>
+</html>

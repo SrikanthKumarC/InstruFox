@@ -46,6 +46,7 @@
 #include "js/PropertySpec.h"
 #include "js/StableStringChars.h"
 #include "js/Wrapper.h"
+#include "vm/BuiltinAudit.h"
 #include "vm/DateTime.h"
 #include "vm/GlobalObject.h"
 #include "vm/JSContext.h"
@@ -105,8 +106,10 @@ static const JSFunctionSpec dateTimeFormat_static_methods[] = {
     JS_FS_END,
 };
 
+static constexpr char kAudit_Intl_DateTimeFormat_resolvedOptions[] = "Intl.DateTimeFormat.resolvedOptions()";
+
 static const JSFunctionSpec dateTimeFormat_methods[] = {
-    JS_FN("resolvedOptions", dateTimeFormat_resolvedOptions, 0, 0),
+    JS_FN("resolvedOptions", (AuditedNative<dateTimeFormat_resolvedOptions, kAudit_Intl_DateTimeFormat_resolvedOptions>), 0, 0),
     JS_FN("formatToParts", dateTimeFormat_formatToParts, 1, 0),
     JS_FN("formatRange", dateTimeFormat_formatRange, 2, 0),
     JS_FN("formatRangeToParts", dateTimeFormat_formatRangeToParts, 2, 0),

@@ -32,6 +32,7 @@
 #include "js/RootingAPI.h"
 #include "js/TypeDecls.h"
 #include "js/Utility.h"
+#include "vm/BuiltinAudit.h"
 #include "vm/GlobalObject.h"
 #include "vm/JSContext.h"
 #include "vm/JSObject.h"
@@ -80,9 +81,11 @@ static const JSFunctionSpec displayNames_static_methods[] = {
     JS_FS_END,
 };
 
+static constexpr char kAudit_Intl_DisplayNames_resolvedOptions[] = "Intl.DisplayNames.resolvedOptions()";
+
 static const JSFunctionSpec displayNames_methods[] = {
     JS_FN("of", displayNames_of, 1, 0),
-    JS_FN("resolvedOptions", displayNames_resolvedOptions, 0, 0),
+    JS_FN("resolvedOptions", (AuditedNative<displayNames_resolvedOptions, kAudit_Intl_DisplayNames_resolvedOptions>), 0, 0),
     JS_FN("toSource", displayNames_toSource, 0, 0),
     JS_FS_END,
 };

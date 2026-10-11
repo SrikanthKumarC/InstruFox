@@ -24,14 +24,26 @@ const CODE_KINDS_FOR_API = [
   [/^Function\(\)$/, ["Function"]],
   [/\.setTimeout\(\)$/, ["setTimeout"]],
   [/\.setInterval\(\)$/, ["setInterval"]],
-  [/^WebAssembly\.compile\(\)$/, ["wasm"]],
+  [/^(?:new )?WebAssembly\.\w+\(\)$/, ["wasm"]],
   [/^new (?:Shared)?Worker\(\)$/, ["worker-script"]],
   [/^ServiceWorkerContainer\.register\(\)$/, ["worker-script"]],
   [/\.importScripts\(\)$/, ["importScripts"]],
 ];
 
+// Kinds of captured code that bypass normal script inspection.
+const HIDDEN_CODE_KINDS = [
+  "eval",
+  "Function",
+  "setTimeout",
+  "setInterval",
+  "javascript-url",
+  "wasm",
+];
+
 const state = {
   windows: new Map(),
+  network: { requests: [], cookies: [], contentBlocking: [] },
+  openRequests: new Set(),
   selected: ALL,
   openNodes: new Set(),
   view: "apis",
@@ -174,6 +186,7 @@ function aggregate(views) {
             contexts: new Map(),
             args: new Set(),
             scripts: new Map(),
+            calls: new Map(),
           };
           apis.set(api.name, entry);
         }
@@ -190,13 +203,27 @@ function aggregate(views) {
         for (let script of api.scripts) {
           entry.scripts.set(script, flagClass(script, topSite));
         }
+        for (let call of api.calls ?? []) {
+          let key = JSON.stringify([call.args, call.result]);
+          let existing = entry.calls.get(key);
+          if (existing) {
+            existing.count += call.count;
+          } else {
+            entry.calls.set(key, { ...call });
+          }
+        }
       }
     }
   }
-  return [...apis.values()].map(entry => ({
-    ...entry,
-    ...rankApi(entry.name, [...entry.args]),
-  }));
+  return [...apis.values()].map(entry => {
+    let calls = [...entry.calls.values()];
+    return {
+      ...entry,
+      calls,
+      results: [...new Set(calls.map(c => c.result).filter(Boolean))],
+      ...rankApi(entry.name, [...entry.args]),
+    };
+  });
 }
 
 function codeKey(win, context, code) {
@@ -225,7 +252,7 @@ function codeEntries(views) {
           isHiddenSourceUrl(code.url) ||
           isHiddenSourceUrl(context.url) ||
           code.antiDebug ||
-          ["eval", "Function", "setTimeout", "setInterval"].includes(code.kind);
+          HIDDEN_CODE_KINDS.includes(code.kind);
         entries.push({
           key,
           win,
@@ -625,7 +652,8 @@ function codeFilterForApi(name) {
 function codeBlock(entry, { collapsible, onChange }) {
   let { code } = entry;
   let loaded = state.codeText.get(entry.key);
-  let size = `${code.length.toLocaleString()} chars${code.truncated ? " (truncated)" : ""}`;
+  let unit = code.encoding == "base64" ? "bytes" : "chars";
+  let size = `${code.length.toLocaleString()} ${unit}${code.truncated ? " (truncated)" : ""}`;
   let header = [
     el("span", { className: "code-kind" }, code.kind),
     code.antiDebug
@@ -650,23 +678,32 @@ function codeBlock(entry, { collapsible, onChange }) {
         ? "The code is no longer available."
         : "Loading..."
     );
-  } else if (code.kind == "wasm") {
-    body.append("WebAssembly compilation; the module bytes are not captured.");
   } else {
-    let copy = el("button", {}, "Copy code");
+    let isBinary = code.encoding == "base64";
+    let copy = el("button", {}, isBinary ? "Copy base64" : "Copy code");
     copy.addEventListener("click", event => {
       event.stopPropagation();
       copyToClipboard(loaded.text, `${code.kind} source`);
     });
-    body.append(
+    let actions = el("div", { className: "code-actions" }, copy);
+    if (isBinary) {
+      let save = el("button", {}, "Save .wasm");
+      save.addEventListener("click", event => {
+        event.stopPropagation();
+        saveBinary(loaded.text, `apiaudit-${code.hash >>> 0}.wasm`);
+      });
+      actions.append(save);
+    }
+    actions.append(
       el(
-        "div",
-        { className: "code-actions" },
-        copy,
-        el("span", { className: "code-meta" }, `SHA-256 ${loaded.sha256}`)
-      ),
-      el("pre", {}, loaded.text)
+        "span",
+        { className: "code-meta" },
+        isBinary
+          ? `WebAssembly module, base64-encoded · SHA-256 of the base64 ${loaded.sha256}`
+          : `SHA-256 ${loaded.sha256}`
+      )
     );
+    body.append(actions, el("pre", {}, loaded.text));
   }
 
   if (!collapsible) {
@@ -730,6 +767,7 @@ function renderTable(node) {
           api.reason,
           ...api.contexts.keys(),
           ...api.args,
+          ...api.results,
           ...api.scripts.keys(),
         ],
         text
@@ -791,6 +829,10 @@ function renderTable(node) {
           [...api.args].map(a => [a, ""]),
           expanded
         ),
+        listCell(
+          api.results.map(r => [r, ""]),
+          expanded
+        ),
         listCell(api.scripts, expanded)
       );
       tr.addEventListener("click", () => {
@@ -801,18 +843,23 @@ function renderTable(node) {
         }
         renderTable(selectedNode());
       });
-      if (!expanded || !codeFilter) {
+      if (!expanded || (!codeFilter && !api.calls.length)) {
         return [tr];
       }
 
-      let entries = node.code.filter(codeFilter);
-      missingCode.push(...entries);
-      let cell = el("td", { colspan: "7" });
-      if (!entries.length) {
-        cell.append("No code was captured for this call.");
+      let cell = el("td", { colspan: "8" });
+      if (api.calls.length) {
+        cell.append(callsTable(api.calls));
       }
-      for (let entry of entries) {
-        cell.append(codeBlock(entry, { collapsible: false }));
+      if (codeFilter) {
+        let entries = node.code.filter(codeFilter);
+        missingCode.push(...entries);
+        if (!entries.length) {
+          cell.append("No code was captured for this call.");
+        }
+        for (let entry of entries) {
+          cell.append(codeBlock(entry, { collapsible: false }));
+        }
       }
       return [tr, el("tr", { className: "code-row" }, cell)];
     })
@@ -825,8 +872,416 @@ function renderTable(node) {
   let hidden = node.ranked.length - rows.length;
   $("status").textContent =
     `${rows.length} APIs shown, ${hidden} hidden by filters. ` +
-    `Expand eval, Function, setTimeout and Worker rows to see the code they ran. ` +
+    `Expand a row to see each distinct call with its arguments and result, ` +
+    `and the code that eval, Function, setTimeout, Worker and WebAssembly ran. ` +
     `Purple: third-party. Orange: blob:/data: code.`;
+}
+
+// Lists the distinct sampled calls of an API: all their arguments, what they
+// returned (or what the returned promise settled with) and who called.
+function callsTable(calls) {
+  let rows = calls.map(call =>
+    el(
+      "tr",
+      {},
+      el("td", {}, call.args.join(", ")),
+      el("td", {}, call.result),
+      el("td", { className: "num" }, call.count.toLocaleString()),
+      el("td", {}, call.script)
+    )
+  );
+  return el(
+    "table",
+    { className: "calls" },
+    el(
+      "thead",
+      {},
+      el(
+        "tr",
+        {},
+        el("th", {}, "Arguments"),
+        el("th", {}, "Result"),
+        el("th", { className: "num" }, "Calls"),
+        el("th", {}, "Caller")
+      )
+    ),
+    el("tbody", {}, ...rows)
+  );
+}
+
+// Single-bit nsIWebProgressListener STATE_* flags used in content blocking
+// logs, by name.
+const BLOCKING_STATES = Object.entries(Ci.nsIWebProgressListener)
+  .filter(
+    ([name, value]) =>
+      /^STATE_(?:BLOCKED|LOADED|COOKIES|REPLACED|ALLOWED|PURGED)_/.test(name) &&
+      Number.isInteger(value) &&
+      value > 0 &&
+      (value & (value - 1)) == 0
+  )
+  .map(([name, value]) => [name.slice("STATE_".length).toLowerCase(), value]);
+
+function blockingStateNames(stateBits) {
+  return BLOCKING_STATES.filter(([, bit]) => stateBits & bit).map(
+    ([name]) => name
+  );
+}
+
+function headerValue(headers, name) {
+  name = name.toLowerCase();
+  return headers.find(([n]) => n.toLowerCase() == name)?.[1] ?? null;
+}
+
+// Returns the requests, cookie changes and content blocking logs that belong
+// to a tree node: its tabs, its windows, and the workers of its sites.
+function networkFor(node) {
+  let { requests, cookies, contentBlocking } = state.network;
+  if (node.type == "all") {
+    return { requests, cookies, contentBlocking };
+  }
+  let wins = node.views.map(v => v.win);
+  let browserIds = new Set(wins.map(w => w.browserId).filter(Boolean));
+  let windowIds = new Set(
+    wins.filter(w => !w.isWorker).map(w => w.innerWindowId)
+  );
+  let documentUrls = new Set(wins.filter(w => !w.isWorker).map(w => w.url));
+  let workerSites = new Set(
+    wins.filter(w => w.isWorker).map(w => siteOf(w.url))
+  );
+  let fromWorkerSite = r =>
+    !r.browserId && workerSites.has(siteOf(r.triggeringOrigin));
+  let matchRequest =
+    node.type == "group"
+      ? r => browserIds.has(r.browserId) || fromWorkerSite(r)
+      : r =>
+          windowIds.has(r.innerWindowId) ||
+          (["document", "subdocument"].includes(r.type) &&
+            browserIds.has(r.browserId) &&
+            documentUrls.has(r.url)) ||
+          fromWorkerSite(r);
+  return {
+    requests: requests.filter(matchRequest),
+    cookies: cookies.filter(c => browserIds.has(c.browserId)),
+    contentBlocking: contentBlocking.filter(l => browserIds.has(l.browserId)),
+  };
+}
+
+function isThirdPartyRequest(request) {
+  let top = request.topUrl ?? request.triggeringOrigin;
+  return !!top && siteOf(request.url) != siteOf(top);
+}
+
+function classificationLabel(request) {
+  let c = request.classification;
+  if (!c) {
+    return "";
+  }
+  let flags = c.thirdParty.length ? c.thirdParty : c.flags;
+  return [
+    ...flags,
+    ...(c.thirdPartyTracker ? ["third-party tracker"] : []),
+  ].join(", ");
+}
+
+function bodySize(request) {
+  let body = request.requestBody;
+  if (!body) {
+    return "";
+  }
+  if (body.unreadable) {
+    return "?";
+  }
+  return `${body.length.toLocaleString()} B`;
+}
+
+function headersBlock(title, headers) {
+  return el(
+    "div",
+    { className: "request-section" },
+    el("h4", {}, title),
+    el(
+      "pre",
+      {},
+      headers.length
+        ? headers.map(([name, value]) => `${name}: ${value}`).join("\n")
+        : "(none)"
+    )
+  );
+}
+
+function requestDetails(request) {
+  let parts = [
+    el(
+      "div",
+      { className: "request-section" },
+      el("h4", {}, "Request"),
+      el(
+        "pre",
+        {},
+        [
+          `URL: ${request.url}`,
+          `Referrer: ${request.referrer ?? "(none)"}`,
+          `Initiator origin: ${request.triggeringOrigin ?? "(none)"}`,
+          `Top-level page: ${request.topUrl ?? "(none)"}`,
+          `Remote address: ${request.remoteAddress ?? "(unknown)"}`,
+          `From cache: ${request.fromCache}`,
+        ].join("\n")
+      )
+    ),
+    headersBlock("Request headers", request.requestHeaders),
+  ];
+  let body = request.requestBody;
+  if (body) {
+    parts.push(
+      el(
+        "div",
+        { className: "request-section" },
+        el(
+          "h4",
+          {},
+          `Request body${body.encoding ? ` (${body.encoding})` : ""}` +
+            `${body.truncated ? " (truncated)" : ""}`
+        ),
+        el(
+          "pre",
+          {},
+          body.unreadable ? "(the body could not be read)" : body.text
+        )
+      )
+    );
+  }
+  parts.push(headersBlock("Response headers", request.responseHeaders));
+  if (request.classification) {
+    let c = request.classification;
+    parts.push(
+      el(
+        "div",
+        { className: "request-section" },
+        el("h4", {}, "Tracking protection classification"),
+        el(
+          "pre",
+          {},
+          [
+            `Flags: ${c.flags.join(", ") || "(none)"}`,
+            `As first party: ${c.firstParty.join(", ") || "(none)"}`,
+            `As third party: ${c.thirdParty.join(", ") || "(none)"}`,
+            `Third-party tracker: ${c.thirdPartyTracker}`,
+            `Matched list: ${c.matchedList ?? "(none)"}`,
+            `Matched tracking lists: ${c.matchedTrackingLists.join(", ") || "(none)"}`,
+          ].join("\n")
+        )
+      )
+    );
+  }
+  return el("div", { className: "request-details" }, ...parts);
+}
+
+function renderNetwork(node) {
+  let text = $("filter").value.trim().toLowerCase();
+  let { requests, cookies, contentBlocking } = networkFor(node);
+  let shownRequests = requests.filter(r =>
+    matchesFilter(
+      [
+        r.url,
+        r.method,
+        r.type,
+        classificationLabel(r),
+        r.requestBody?.text ?? "",
+        ...r.requestHeaders.flat(),
+        ...r.responseHeaders.flat(),
+      ],
+      text
+    )
+  );
+  $("request-rows").replaceChildren(
+    ...shownRequests.flatMap(request => {
+      let key = `${request.id}:${request.time}`;
+      let open = state.openRequests.has(key);
+      let cookieHeader = headerValue(request.requestHeaders, "cookie");
+      let tr = el(
+        "tr",
+        { className: open ? "expanded" : "" },
+        el("td", {}, new Date(request.time).toLocaleTimeString()),
+        el("td", {}, request.method),
+        el("td", {}, request.type),
+        el("td", { className: "num" }, String(request.status ?? "")),
+        el(
+          "td",
+          {
+            className: isThirdPartyRequest(request) ? "tp" : "",
+            title: request.url,
+          },
+          request.url
+        ),
+        el("td", { className: "classified" }, classificationLabel(request)),
+        el("td", { className: "num" }, bodySize(request)),
+        el(
+          "td",
+          { title: cookieHeader ?? "" },
+          cookieHeader ? plural(cookieHeader.split(";").length, "cookie") : ""
+        )
+      );
+      tr.addEventListener("click", () => {
+        if (open) {
+          state.openRequests.delete(key);
+        } else {
+          state.openRequests.add(key);
+        }
+        renderNetwork(selectedNode());
+      });
+      if (!open) {
+        return [tr];
+      }
+      return [
+        tr,
+        el(
+          "tr",
+          { className: "code-row" },
+          el("td", { colspan: "8" }, requestDetails(request))
+        ),
+      ];
+    })
+  );
+
+  $("cookie-rows").replaceChildren(
+    ...cookies
+      .filter(c =>
+        matchesFilter([c.host, c.name, c.value, c.action].map(String), text)
+      )
+      .map(c =>
+        el(
+          "tr",
+          {},
+          el("td", {}, new Date(c.time).toLocaleTimeString()),
+          el("td", {}, c.action),
+          el("td", { className: c.thirdParty ? "tp" : "" }, c.host ?? ""),
+          el("td", {}, c.name ?? ""),
+          el("td", { title: c.value ?? "" }, c.value ?? ""),
+          el(
+            "td",
+            {},
+            c.expiry ? new Date(c.expiry).toLocaleString() : "session"
+          ),
+          el(
+            "td",
+            {},
+            [
+              c.secure ? "secure" : "",
+              c.httpOnly ? "httpOnly" : "",
+              c.sameSite ? `sameSite=${c.sameSite}` : "",
+              c.partitioned ? "partitioned" : "",
+              c.partitionKey ? `partition ${c.partitionKey}` : "",
+              c.thirdParty ? "third-party" : "",
+            ]
+              .filter(Boolean)
+              .join(" ")
+          )
+        )
+      )
+  );
+
+  $("blocking-log").replaceChildren(
+    ...contentBlocking.map(({ url, log }) =>
+      el(
+        "div",
+        { className: "request-section" },
+        el("h4", {}, url ?? "(unknown page)"),
+        el(
+          "pre",
+          {},
+          Object.entries(log)
+            .map(
+              ([origin, events]) =>
+                `${origin}: ` +
+                events
+                  .map(([bits, blocked, count]) =>
+                    [
+                      blocked ? "blocked" : "allowed",
+                      ...blockingStateNames(bits),
+                      count > 1 ? `x${count}` : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")
+                  )
+                  .join("; ")
+            )
+            .join("\n")
+        )
+      )
+    )
+  );
+
+  let summary = networkSummary({ requests, cookies });
+  $("network-summary").textContent =
+    `${plural(requests.length, "request")} · ` +
+    `${plural(summary.thirdPartyHosts.size, "third-party host")} · ` +
+    `${plural(summary.trackers.size, "host")} classified by tracking protection · ` +
+    `${plural(summary.withBody, "request")} with a body · ` +
+    `${plural(cookies.length, "cookie change")}`;
+  $("status").textContent =
+    `${shownRequests.length} of ${requests.length} requests shown. ` +
+    `Click a request for its headers, body and classification. ` +
+    `Purple: third-party.`;
+}
+
+function networkSummary({ requests, cookies }) {
+  let thirdPartyHosts = new Set();
+  let trackers = new Map();
+  let hosts = new Map();
+  let withBody = 0;
+  for (let request of requests) {
+    let host;
+    try {
+      host = new URL(request.url).host;
+    } catch {
+      host = request.url;
+    }
+    let entry = hosts.get(host) ?? {
+      host,
+      requests: 0,
+      thirdParty: false,
+      withBody: 0,
+      cookiesSent: 0,
+      setCookies: 0,
+      classification: new Set(),
+      types: new Set(),
+    };
+    entry.requests++;
+    entry.types.add(request.type);
+    if (isThirdPartyRequest(request)) {
+      entry.thirdParty = true;
+      thirdPartyHosts.add(host);
+    }
+    if (request.requestBody) {
+      entry.withBody++;
+      withBody++;
+    }
+    if (headerValue(request.requestHeaders, "cookie")) {
+      entry.cookiesSent++;
+    }
+    if (headerValue(request.responseHeaders, "set-cookie")) {
+      entry.setCookies++;
+    }
+    let label = classificationLabel(request);
+    if (label) {
+      entry.classification.add(label);
+      trackers.set(host, label);
+    }
+    hosts.set(host, entry);
+  }
+  let cookieHosts = new Set(cookies.map(c => c.host).filter(Boolean));
+  return { hosts, thirdPartyHosts, trackers, withBody, cookieHosts };
+}
+
+function saveBinary(base64, name) {
+  Downloads.getPreferredDownloadsDirectory().then(async dir => {
+    let path = PathUtils.join(dir, name);
+    await IOUtils.write(
+      path,
+      Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+    );
+    $("status").textContent = `Saved to ${path}`;
+  });
 }
 
 async function sha256(text) {
@@ -936,10 +1391,15 @@ function renderView(page) {
     button.classList.toggle("active", button.dataset.view == state.view);
   }
   $("view-code").textContent = `Code (${page.code.length})`;
+  $("view-network").textContent =
+    `Network (${networkFor(page).requests.length})`;
   $("apis-view").hidden = state.view != "apis";
   $("code-view").hidden = state.view != "code";
+  $("network-view").hidden = state.view != "network";
   if (state.view == "apis") {
     renderTable(page);
+  } else if (state.view == "network") {
+    renderNetwork(page);
   } else {
     renderCode(page);
   }
@@ -957,6 +1417,7 @@ function render({ fromPoll = false } = {}) {
     let codeKeys = page.code.map(entry => entry.key).join();
     if (
       (state.view == "code" && codeKeys == state.renderedCodeKeys) ||
+      (state.view == "network" && state.openRequests.size) ||
       !window.getSelection().isCollapsed
     ) {
       return;
@@ -969,6 +1430,7 @@ async function refresh({ fromPoll = false } = {}) {
   let windows;
   try {
     windows = await ApiAudit.collect();
+    state.network = ApiAudit.collectNetwork();
   } catch (e) {
     $("status").textContent = `Failed to collect records: ${e}`;
     return;
@@ -1019,10 +1481,14 @@ async function buildReport() {
         count: api.count,
         contexts: [...api.contexts.keys()],
         args: [...api.args],
+        results: api.results,
         scripts: [...api.scripts.keys()],
+        calls: api.calls,
       })),
+    network: networkFor(page),
     code: page.code.map(entry => ({
       kind: entry.code.kind,
+      encoding: entry.code.encoding ?? "text",
       url: entry.code.url,
       context: entry.label,
       hidden: entry.hidden,
@@ -1166,11 +1632,12 @@ function buildSummary(node) {
       `### ${CATEGORIES[category]} (max score ${list[0].score}, ` +
         `${plural(list.length, "API")}, ${plural(calls, "call")})`,
       "",
-      "| Score | API | Kind | Calls | Contexts | Arguments | Callers |",
-      "| ---: | --- | --- | ---: | --- | --- | --- |"
+      "| Score | API | Kind | Calls | Contexts | Arguments | Results | Callers |",
+      "| ---: | --- | --- | ---: | --- | --- | --- | --- |"
     );
     for (let api of list) {
       let args = [...api.args];
+      let results = api.results;
       let scripts = [...api.scripts.keys()];
       let where = [...api.contexts.keys()];
       lines.push(
@@ -1181,6 +1648,8 @@ function buildSummary(node) {
           `${where.length > 2 ? ` +${where.length - 2}` : ""} | ` +
           `${cell(args.slice(0, 3).join(", "), 160)}` +
           `${args.length > 3 ? ` +${args.length - 3}` : ""} | ` +
+          `${cell(results.slice(0, 3).join(", "), 160)}` +
+          `${results.length > 3 ? ` +${results.length - 3}` : ""} | ` +
           `${cell(scripts.slice(0, 2).join("; "))}` +
           `${scripts.length > 2 ? ` +${scripts.length - 2}` : ""} |`
       );
@@ -1222,6 +1691,56 @@ function buildSummary(node) {
     }
     lines.push("", "Use Copy all for the full code text.");
   }
+
+  let network = networkFor(node);
+  if (network.requests.length || network.cookies.length) {
+    let summary = networkSummary(network);
+    lines.push(
+      "",
+      "## Network",
+      "",
+      `- ${plural(network.requests.length, "request")} to ` +
+        `${plural(summary.hosts.size, "host")} ` +
+        `(${summary.thirdPartyHosts.size} third-party), ` +
+        `${plural(summary.withBody, "request")} with a body`,
+      `- ${plural(summary.trackers.size, "host")} classified by Firefox ` +
+        `tracking protection`,
+      `- ${plural(network.cookies.length, "cookie change")} on ` +
+        `${plural(summary.cookieHosts.size, "host")}`,
+      "",
+      "| Host | Requests | Party | Types | With body | Cookies sent | Set-Cookie | Tracking protection |",
+      "| --- | ---: | --- | --- | ---: | ---: | ---: | --- |"
+    );
+    for (let entry of [...summary.hosts.values()].sort(
+      (a, b) => b.thirdParty - a.thirdParty || b.requests - a.requests
+    )) {
+      lines.push(
+        `| ${cell(entry.host)} | ${entry.requests} | ` +
+          `${entry.thirdParty ? "third" : "first"} | ` +
+          `${cell([...entry.types].join(", "))} | ${entry.withBody} | ` +
+          `${entry.cookiesSent} | ${entry.setCookies} | ` +
+          `${cell([...entry.classification].join("; "))} |`
+      );
+    }
+    if (network.cookies.length) {
+      lines.push(
+        "",
+        "### Cookie changes",
+        "",
+        "| Action | Host | Name | Value | Expiry | Third-party |",
+        "| --- | --- | --- | --- | --- | --- |"
+      );
+      for (let c of network.cookies) {
+        lines.push(
+          `| ${c.action} | ${cell(c.host ?? "")} | ${cell(c.name ?? "")} | ` +
+            `${cell(c.value ?? "", 60)} | ` +
+            `${c.expiry ? new Date(c.expiry).toISOString() : "session"} | ` +
+            `${c.thirdParty ? "yes" : "no"} |`
+        );
+      }
+    }
+    lines.push("", "Use Copy all for every request's headers and body.");
+  }
   return lines.join("\n") + "\n";
 }
 
@@ -1233,6 +1752,8 @@ async function copySummary() {
 
 function resetLocalState() {
   state.windows.clear();
+  state.network = { requests: [], cookies: [], contentBlocking: [] };
+  state.openRequests.clear();
   state.expanded.clear();
   state.openCode.clear();
   state.codeText.clear();

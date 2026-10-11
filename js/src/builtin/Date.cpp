@@ -52,6 +52,7 @@
 #include "util/LanguageId.h"
 #include "util/StringBuilder.h"
 #include "util/Text.h"
+#include "vm/BuiltinAudit.h"
 #include "vm/DateObject.h"
 #include "vm/DateTime.h"
 #include "vm/GlobalObject.h"
@@ -4650,9 +4651,16 @@ static const JSFunctionSpec date_static_methods[] = {
     JS_FS_END,
 };
 
+static constexpr char kAudit_Date_getTimezoneOffset[] = "Date.getTimezoneOffset()";
+static constexpr char kAudit_Date_toLocaleString[] = "Date.toLocaleString()";
+static constexpr char kAudit_Date_toLocaleDateString[] = "Date.toLocaleDateString()";
+static constexpr char kAudit_Date_toLocaleTimeString[] = "Date.toLocaleTimeString()";
+static constexpr char kAudit_Date_toTimeString[] = "Date.toTimeString()";
+static constexpr char kAudit_Date_toString[] = "Date.toString()";
+
 static const JSFunctionSpec date_methods[] = {
     JS_INLINABLE_FN("getTime", date_getTime, 0, 0, DateGetTime),
-    JS_FN("getTimezoneOffset", date_getTimezoneOffset, 0, 0),
+    JS_FN("getTimezoneOffset", (AuditedNative<date_getTimezoneOffset, kAudit_Date_getTimezoneOffset>), 0, 0),
     JS_FN("getYear", date_getYear, 0, 0),
     JS_INLINABLE_FN("getFullYear", date_getFullYear, 0, 0, DateGetFullYear),
     JS_FN("getUTCFullYear", date_getUTCFullYear, 0, 0),
@@ -4690,15 +4698,15 @@ static const JSFunctionSpec date_methods[] = {
 #if JS_HAS_INTL_API
     JS_FN("toTemporalInstant", date_toTemporalInstant, 0, 0),
 #endif
-    JS_FN("toLocaleString", date_toLocaleString, 0, 0),
-    JS_FN("toLocaleDateString", date_toLocaleDateString, 0, 0),
-    JS_FN("toLocaleTimeString", date_toLocaleTimeString, 0, 0),
+    JS_FN("toLocaleString", (AuditedNative<date_toLocaleString, kAudit_Date_toLocaleString>), 0, 0),
+    JS_FN("toLocaleDateString", (AuditedNative<date_toLocaleDateString, kAudit_Date_toLocaleDateString>), 0, 0),
+    JS_FN("toLocaleTimeString", (AuditedNative<date_toLocaleTimeString, kAudit_Date_toLocaleTimeString>), 0, 0),
     JS_FN("toDateString", date_toDateString, 0, 0),
-    JS_FN("toTimeString", date_toTimeString, 0, 0),
+    JS_FN("toTimeString", (AuditedNative<date_toTimeString, kAudit_Date_toTimeString>), 0, 0),
     JS_FN("toISOString", date_toISOString, 0, 0),
     JS_FN("toJSON", date_toJSON, 1, 0),
     JS_FN("toSource", date_toSource, 0, 0),
-    JS_FN("toString", date_toString, 0, 0),
+    JS_FN("toString", (AuditedNative<date_toString, kAudit_Date_toString>), 0, 0),
     JS_INLINABLE_FN("valueOf", date_valueOf, 0, 0, DateGetTime),
     JS_SYM_FN(toPrimitive, date_toPrimitive, 1, JSPROP_READONLY),
     JS_FS_END,

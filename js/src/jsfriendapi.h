@@ -383,6 +383,21 @@ JS_PUBLIC_API void CommitPendingWrapperPreservations(JSContext* cx);
 JS_PUBLIC_API bool IsObjectInContextCompartment(JSObject* obj,
                                                 const JSContext* cx);
 
+/**
+ * Called after some builtins that reveal the user's environment (time zone,
+ * locale, floating point behavior) or compile WebAssembly return. |name| is
+ * a static string such as "Date.getTimezoneOffset()" or
+ * "new WebAssembly.Module()". |ok| is what the builtin returned; when true,
+ * args.rval() holds its result.
+ */
+using BuiltinAuditHook = void (*)(JSContext* cx, const char* name,
+                                  const JS::CallArgs& args, bool ok);
+
+/**
+ * Sets the process-wide builtin audit hook, or clears it if |hook| is null.
+ */
+JS_PUBLIC_API void SetBuiltinAuditHook(BuiltinAuditHook hook);
+
 /*
  * NB: keep these in sync with the copy in builtin/SelfHostingDefines.h.
  */

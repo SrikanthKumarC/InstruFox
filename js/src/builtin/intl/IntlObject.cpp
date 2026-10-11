@@ -31,6 +31,7 @@
 #include "js/GCVector.h"
 #include "js/PropertyAndElement.h"
 #include "js/PropertySpec.h"
+#include "vm/BuiltinAudit.h"
 #include "vm/GlobalObject.h"
 #include "vm/JSAtomUtils.h"  // ClassName
 #include "vm/JSContext.h"
@@ -521,10 +522,12 @@ static bool intl_toSource(JSContext* cx, unsigned argc, Value* vp) {
   return true;
 }
 
+static constexpr char kAudit_Intl_supportedValuesOf[] = "Intl.supportedValuesOf()";
+
 static const JSFunctionSpec intl_static_methods[] = {
     JS_FN("toSource", intl_toSource, 0, 0),
     JS_FN("getCanonicalLocales", intl_getCanonicalLocales, 1, 0),
-    JS_FN("supportedValuesOf", intl_supportedValuesOf, 1, 0),
+    JS_FN("supportedValuesOf", (AuditedNative<intl_supportedValuesOf, kAudit_Intl_supportedValuesOf>), 1, 0),
     JS_FS_END,
 };
 

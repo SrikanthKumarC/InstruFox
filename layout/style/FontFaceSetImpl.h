@@ -140,6 +140,10 @@ class FontFaceSetImpl : public nsISupports, public gfxUserFontSet {
 
   virtual dom::Document* GetDocument() const { return nullptr; }
 
+  void RecordLocalFontLookup(const nsACString& aLocalName,
+                             const nsACString& aFamilyName,
+                             bool aFound) override;
+
   virtual already_AddRefed<URLExtraData> GetURLExtraData() = 0;
 
   // -- Web IDL --------------------------------------------------------------

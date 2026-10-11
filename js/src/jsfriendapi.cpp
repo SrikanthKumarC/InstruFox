@@ -34,6 +34,7 @@
 #include "proxy/DeadObjectProxy.h"
 #include "util/Poison.h"
 #include "vm/ArgumentsObject.h"
+#include "vm/BuiltinAudit.h"
 #include "vm/BooleanObject.h"
 #include "vm/DateObject.h"
 #include "vm/EnvironmentObject.h"
@@ -808,4 +809,10 @@ bool JS::AddMozDisplayNamesConstructor(JSContext* cx, JS::HandleObject intl) {
 
 JS_PUBLIC_API JS::Zone* js::GetObjectZoneFromAnyThread(const JSObject* obj) {
   return MaybeForwarded(obj)->zoneFromAnyThread();
+}
+
+std::atomic<js::BuiltinAuditHook> js::gBuiltinAuditHook(nullptr);
+
+JS_PUBLIC_API void js::SetBuiltinAuditHook(BuiltinAuditHook hook) {
+  gBuiltinAuditHook.store(hook, std::memory_order_release);
 }

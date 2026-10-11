@@ -48,6 +48,11 @@ class WorkerDescriptorActor extends Actor {
   constructor(conn, dbg) {
     super(conn, workerDescriptorSpec);
     this._dbg = dbg;
+    // Cache properties that may not be accessible after the worker closes
+    this._cachedUrl = dbg.url;
+    this._cachedId = dbg.id;
+    this._cachedType = dbg.type;
+    this._cachedPrincipal = dbg.principal;
 
     this._threadActor = null;
     this._transport = null;
@@ -59,6 +64,12 @@ class WorkerDescriptorActor extends Actor {
 
     this._dbg.addListener(this._dbgListener);
     this._attached = true;
+
+    // Check if the worker is already closed (race condition for fast-terminating workers)
+    if (dbg.isClosed && this._shouldRetainTerminated()) {
+      this._terminated = true;
+      this._detach();
+    }
   }
 
   form() {
@@ -71,13 +82,15 @@ class WorkerDescriptorActor extends Actor {
 
       targetType: this._targetType,
 
-      id: this._dbg.id,
-      url: this._dbg.url,
-      origin: this._dbg.principal.origin,
-      traits: {},
-      type: this._dbg.type,
+      id: this._cachedId,
+      url: this._cachedUrl,
+      origin: this._cachedPrincipal?.origin,
+      traits: {
+        isTerminated: !!this._terminated,
+      },
+      type: this._cachedType,
     };
-    if (this._dbg.type === Ci.nsIWorkerDebugger.TYPE_SERVICE) {
+    if (this._cachedType === Ci.nsIWorkerDebugger.TYPE_SERVICE) {
       /**
        * The ServiceWorkerManager in content processes don't maintain
        * ServiceWorkerRegistrations; record the ServiceWorker's ID, and
@@ -168,7 +181,21 @@ class WorkerDescriptorActor extends Actor {
   }
 
   _onWorkerClose() {
+    if (this._shouldRetainTerminated()) {
+      this._terminated = true;
+      this._detach();
+      return;
+    }
     this.destroy();
+  }
+
+  _shouldRetainTerminated() {
+    const url = this._cachedUrl;
+    return (
+      Services.prefs.getBoolPref("privacy.apiaudit.hideDevTools", true) &&
+      !!url &&
+      (url.startsWith("blob:") || url.startsWith("data:"))
+    );
   }
 
   _onWorkerError(filename, lineno, message) {
@@ -177,7 +204,10 @@ class WorkerDescriptorActor extends Actor {
 
   _getServiceWorkerRegistrationInfo() {
     try {
-      return swm.getRegistrationByPrincipal(this._dbg.principal, this._dbg.url);
+      return swm.getRegistrationByPrincipal(
+        this._cachedPrincipal,
+        this._cachedUrl
+      );
     } catch (e) {
       // getRegistrationByPrincipal throws NS_ERROR_FAILURE when there is no
       // matching registration. With the parent-process worker debugger, a
@@ -190,6 +220,9 @@ class WorkerDescriptorActor extends Actor {
   }
 
   _detach() {
+    if (!this._attached) {
+      return;
+    }
     if (this._threadActor !== null) {
       this._transport.close();
       this._transport = null;

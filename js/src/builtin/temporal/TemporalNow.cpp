@@ -29,6 +29,7 @@
 #include "js/PropertySpec.h"
 #include "js/RootingAPI.h"
 #include "js/TypeDecls.h"
+#include "vm/BuiltinAudit.h"
 #include "vm/DateTime.h"
 #include "vm/GlobalObject.h"
 #include "vm/JSContext.h"
@@ -244,8 +245,10 @@ const JSClass TemporalNowObject::class_ = {
     &TemporalNowObject::classSpec_,
 };
 
+static constexpr char kAudit_Temporal_Now_timeZoneId[] = "Temporal.Now.timeZoneId()";
+
 static const JSFunctionSpec TemporalNow_methods[] = {
-    JS_FN("timeZoneId", Temporal_Now_timeZoneId, 0, 0),
+    JS_FN("timeZoneId", (AuditedNative<Temporal_Now_timeZoneId, kAudit_Temporal_Now_timeZoneId>), 0, 0),
     JS_FN("instant", Temporal_Now_instant, 0, 0),
     JS_FN("plainDateTimeISO", Temporal_Now_plainDateTimeISO, 0, 0),
     JS_FN("zonedDateTimeISO", Temporal_Now_zonedDateTimeISO, 0, 0),

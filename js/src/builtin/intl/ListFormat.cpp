@@ -20,6 +20,7 @@
 #include "js/ForOfIterator.h"
 #include "js/Utility.h"
 #include "js/Vector.h"
+#include "vm/BuiltinAudit.h"
 #include "vm/JSContext.h"
 #include "vm/PlainObject.h"
 #include "vm/StringType.h"
@@ -65,8 +66,10 @@ static const JSFunctionSpec listFormat_static_methods[] = {
     JS_FS_END,
 };
 
+static constexpr char kAudit_Intl_ListFormat_resolvedOptions[] = "Intl.ListFormat.resolvedOptions()";
+
 static const JSFunctionSpec listFormat_methods[] = {
-    JS_FN("resolvedOptions", listFormat_resolvedOptions, 0, 0),
+    JS_FN("resolvedOptions", (AuditedNative<listFormat_resolvedOptions, kAudit_Intl_ListFormat_resolvedOptions>), 0, 0),
     JS_FN("format", listFormat_format, 1, 0),
     JS_FN("formatToParts", listFormat_formatToParts, 1, 0),
     JS_FN("toSource", listFormat_toSource, 0, 0),

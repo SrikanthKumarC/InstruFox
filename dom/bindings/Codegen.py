@@ -9159,6 +9159,26 @@ def needsCallerType(m):
     return m.getExtendedAttribute("NeedsCallerType")
 
 
+def apiAuditName(descriptor, idlNode, getter, setter, isConstructor):
+    """
+    The quoted name under which API Audit records a binding member, e.g.
+    "Navigator.userAgent", "Document.cookie=", "Window.fetch()" or
+    "new Worker()".
+    """
+    iface = descriptor.interface.identifier.name
+    if isConstructor:
+        return '"new %s()"' % iface
+    suffix = "=" if setter else "" if getter else "()"
+    return '"%s.%s%s"' % (iface, idlNode.identifier.name, suffix)
+
+
+def apiAuditGetterGuard(name):
+    return (
+        "mozilla::apiaudit::AutoRecordGetter<std::remove_cvref_t<decltype(args)>> "
+        "apiAuditGuard(cx, %s, args);\n" % name
+    )
+
+
 class CGPerSignatureCall(CGThing):
     """
     This class handles the guts of generating code for a particular
@@ -9217,6 +9237,7 @@ class CGPerSignatureCall(CGThing):
         extendedAttributes=None,
         errorReportingLabel=None,
         additionalArgsPre=[],
+        apiAudit=True,
     ):
         assert idlNode.isMethod() == (not getter and not setter)
         assert idlNode.isAttr() == (getter or setter)
@@ -9240,7 +9261,8 @@ class CGPerSignatureCall(CGThing):
         )
         cgThings = []
 
-        cgThings.append(self.apiAuditCall(descriptor, idlNode, getter, setter))
+        if apiAudit:
+            cgThings.append(self.apiAuditCall(descriptor, idlNode, getter, setter))
 
         deprecated = idlNode.getExtendedAttribute("Deprecated") or (
             idlNode.isStatic()
@@ -9609,16 +9631,23 @@ class CGPerSignatureCall(CGThing):
         self.cgRoot = CGList(cgThings)
 
     def apiAuditCall(self, descriptor, idlNode, getter, setter):
-        iface = descriptor.interface.identifier.name
-        if self.isConstructor:
-            name = "new %s()" % iface
+        name = apiAuditName(descriptor, idlNode, getter, setter, self.isConstructor)
+        if isinstance(self, CGProxySpecialOperation):
+            value = "rootedValue" if idlNode.isSetter() else "JS::UndefinedHandleValue"
+            call = "mozilla::apiaudit::RecordKey(cx, %s, %s, %s);" % (
+                name,
+                self.arguments[0].identifier.name,
+                value,
+            )
+        elif getter:
+            return CGGeneric(apiAuditGetterGuard(name))
+        elif setter:
+            call = "mozilla::apiaudit::RecordSetter(cx, %s, args[0]);" % name
         else:
-            suffix = "=" if setter else "" if getter else "()"
-            name = "%s.%s%s" % (iface, idlNode.identifier.name, suffix)
-        if type(self) is CGPerSignatureCall and idlNode.isMethod():
-            call = 'mozilla::apiaudit::RecordMethod(cx, "%s", args);' % name
-        else:
-            call = 'mozilla::apiaudit::Record(cx, "%s");' % name
+            return CGGeneric(
+                "mozilla::apiaudit::AutoRecordMethod<std::remove_cvref_t<decltype(args)>> "
+                "apiAuditGuard(cx, %s, args);\n" % name
+            )
         return CGGeneric(
             fill(
                 """
@@ -10483,6 +10512,7 @@ class CGGetterCall(CGPerSignatureCall):
         dontSetSlot=False,
         extendedAttributes=None,
         preConversionCode=None,
+        apiAudit=True,
     ):
         self.preConversionCode = preConversionCode
         if attr.getExtendedAttribute("UseCounter"):
@@ -10508,6 +10538,7 @@ class CGGetterCall(CGPerSignatureCall):
             extendedAttributes=extendedAttributes,
             errorReportingLabel=errorReportingLabel,
             additionalArgsPre=argsPre,
+            apiAudit=apiAudit,
         )
 
     def wrap_return_value(self):
@@ -11371,6 +11402,10 @@ class CGSpecializedGetterCommon(CGAbstractStaticMethod):
         argsPre = [a.name for a in self.additionalArgs]
         maybeReturnCachedVal = None
         if self.attr.slotIndices is not None:
+            # Record reads served from the slot too, not only the first one.
+            prefix += apiAuditGetterGuard(
+                apiAuditName(self.descriptor, self.attr, True, False, False)
+            )
             # We're going to store this return value in a slot on some object,
             # to cache it.  The question is, which object?  For dictionary and
             # sequence return values, we want to use a slot on the Xray expando
@@ -11495,6 +11530,7 @@ class CGSpecializedGetterCommon(CGAbstractStaticMethod):
                 self.errorReportingLabel,
                 argsPre=argsPre,
                 preConversionCode=maybeReturnCachedVal,
+                apiAudit=self.attr.slotIndices is None,
             ).define()
         )
 

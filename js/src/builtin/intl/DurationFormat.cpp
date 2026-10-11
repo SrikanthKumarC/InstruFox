@@ -38,6 +38,7 @@
 #include "js/RootingAPI.h"
 #include "js/TypeDecls.h"
 #include "js/Value.h"
+#include "vm/BuiltinAudit.h"
 #include "vm/GlobalObject.h"
 #include "vm/JSContext.h"
 #include "vm/PlainObject.h"
@@ -93,8 +94,10 @@ static const JSFunctionSpec durationFormat_static_methods[] = {
     JS_FS_END,
 };
 
+static constexpr char kAudit_Intl_DurationFormat_resolvedOptions[] = "Intl.DurationFormat.resolvedOptions()";
+
 static const JSFunctionSpec durationFormat_methods[] = {
-    JS_FN("resolvedOptions", durationFormat_resolvedOptions, 0, 0),
+    JS_FN("resolvedOptions", (AuditedNative<durationFormat_resolvedOptions, kAudit_Intl_DurationFormat_resolvedOptions>), 0, 0),
     JS_FN("format", durationFormat_format, 1, 0),
     JS_FN("formatToParts", durationFormat_formatToParts, 1, 0),
     JS_FN("toSource", durationFormat_toSource, 0, 0),

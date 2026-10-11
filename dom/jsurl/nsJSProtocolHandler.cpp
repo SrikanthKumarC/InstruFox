@@ -8,6 +8,7 @@
 #include "js/CompilationAndEvaluation.h"
 #include "js/Wrapper.h"
 #include "jsapi.h"
+#include "mozilla/ApiAuditScripts.h"
 #include "mozilla/BasePrincipal.h"
 #include "mozilla/CycleCollectedJSContext.h"
 #include "mozilla/ErrorResult.h"
@@ -413,6 +414,8 @@ nsresult JSURLInputStream::EvaluateScript(
           "JSExecutionContext",
           /* dynamicStr */ nullptr, JS::ProfilingCategoryPair::JS);
       JSAutoRealm autoRealm(cx, globalJSObject);
+      mozilla::apiaudit::RecordCodeText(cx, "javascript-url", mURL,
+                                        NS_ConvertUTF8toUTF16(script));
       RefPtr<JS::Stencil> stencil;
       JS::Rooted<JSScript*> compiledScript(cx);
       mozilla::dom::Compile(cx, options, NS_ConvertUTF8toUTF16(script), stencil,

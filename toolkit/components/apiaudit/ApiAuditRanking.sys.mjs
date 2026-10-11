@@ -16,6 +16,8 @@ export const CATEGORIES = {
   audio: "Audio fingerprinting",
   fonts: "Font enumeration",
   hardware: "Device & browser properties",
+  locale: "Time zone & locale",
+  math: "Math precision",
   screen: "Screen & window geometry",
   media: "Media devices & codecs",
   sensors: "Sensors & location",
@@ -101,6 +103,7 @@ const RULES = [
 
   // Fonts
   ["Window\\.queryLocalFonts", "fonts", 95],
+  ["CSS\\.@font-face local", "fonts", 80],
   ["FontFaceSet\\.check", "fonts", 75],
   ["FontFaceSet\\.load", "fonts", 40],
   ["Document\\.fonts", "fonts", 35],
@@ -279,8 +282,23 @@ const RULES = [
   ["Performance\\.now", "timing", 15],
   ["Window\\.requestAnimationFrame", "timing", 5],
 
+  // Time zone & locale: JS builtins recorded through the engine hook.
+  ["Temporal\\.Now\\.timeZoneId", "locale", 75],
+  ["Intl\\.DateTimeFormat\\.resolvedOptions", "locale", 75],
+  ["Date\\.getTimezoneOffset", "locale", 70],
+  ["Intl\\.supportedValuesOf", "locale", 50],
+  ["Intl\\.\\w+\\.resolvedOptions", "locale", 45],
+  ["Date\\.(?:toString|toTimeString)", "locale", 40],
+  ["Date\\.toLocale(?:Date|Time)?String", "locale", 35],
+
+  // Math precision: results differ across math libraries and CPUs.
+  ["Math\\.\\w+", "math", 20],
+
   // Media queries & styles
   ["Window\\.matchMedia", "css", 50],
+  ["CSS\\.@media", "css", 35],
+  ["CSS\\.(?:@import media|stylesheet media)", "css", 35],
+  ["CSS\\.@supports", "css", 25],
   ["MediaQueryList\\.(?:matches|media)", "css", 35],
   ["Window\\.getComputedStyle", "css", 15],
   ["CSS\\.supports", "css", 40],
@@ -307,7 +325,7 @@ const RULES = [
 
   // Dynamic / hidden code
   ["eval|Function", "dynamic", 55],
-  ["WebAssembly\\.compile", "dynamic", 50],
+  ["WebAssembly\\..*", "dynamic", 50],
   ["URL\\.createObjectURL", "dynamic", 35],
 
   // Workers & background
@@ -337,6 +355,9 @@ const COMPILED = RULES.map(([source, category, score]) => ({
 const WEBGL_UNMASKED = new Set(["37445", "37446"]);
 const SENSOR_EVENTS =
   /^"(?:devicemotion|deviceorientation|deviceorientationabsolute|gamepadconnected|gamepaddisconnected|devicechange|voiceschanged)"$/;
+// Arguments far outside the usual range, which only make sense to compare
+// floating point implementations (as FingerprintJS's math source does).
+const EXTREME_MATH_ARG = /^-?(?:\d+(?:\.\d+)?e[+-]?\d{2,}|\d{11,})/i;
 const FINGERPRINT_MEDIA_FEATURES =
   /prefers-|color-gamut|dynamic-range|forced-colors|inverted-colors|monochrome|resolution|device-pixel-ratio|pointer|hover|-moz-|device-width|device-height|color-index|display-mode|video-/;
 
@@ -392,11 +413,21 @@ function argBoost(parsed, args) {
       };
     }
   }
-  if (iface == "Window" && member == "matchMedia") {
+  if (iface == "Math" && args.some(a => EXTREME_MATH_ARG.test(a))) {
+    return {
+      category: "math",
+      score: 60,
+      reason: "extreme argument (math precision probe)",
+    };
+  }
+  if (
+    (iface == "Window" && member == "matchMedia") ||
+    (iface == "CSS" && member.startsWith("@"))
+  ) {
     if (args.some(a => FINGERPRINT_MEDIA_FEATURES.test(a))) {
       return {
         category: "css",
-        score: 70,
+        score: iface == "CSS" ? 60 : 70,
         reason: "fingerprintable media feature",
       };
     }

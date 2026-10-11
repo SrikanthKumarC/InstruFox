@@ -3,12 +3,18 @@ support-files = [
   "file_antidebug.html",
   "file_antidebug_console.html",
   "file_blob_worker.html",
+  "file_capture.html",
   "file_external.js",
   "file_fingerprint.html",
   "file_module.mjs",
   "file_shared_worker.js",
   "file_sw.js",
   "file_sw_page.html",
+  "file_worker_lifetime.html",
 ]
 
 ["browser_apiaudit.js"]
+
+["browser_apiaudit_capture.js"]
+
+["browser_worker_lifetime.js"]

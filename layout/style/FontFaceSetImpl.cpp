@@ -10,6 +10,7 @@
 #include "gfxFontSrcURI.h"
 #include "gfxFontUtils.h"
 #include "gfxPlatformFontList.h"
+#include "mozilla/ApiAuditScripts.h"
 #include "mozilla/AsyncEventDispatcher.h"
 #include "mozilla/BasePrincipal.h"
 #include "mozilla/FontPropertyTypes.h"
@@ -83,6 +84,17 @@ FontFaceSetImpl::~FontFaceSetImpl() {
   MOZ_ASSERT(!gfxFontUtils::IsInServoTraversal());
 
   Destroy();
+}
+
+void FontFaceSetImpl::RecordLocalFontLookup(const nsACString& aLocalName,
+                                            const nsACString& aFamilyName,
+                                            bool aFound) {
+  apiaudit::RecordForDocument(
+      GetDocument(), "CSS.@font-face local()",
+      nsPrintfCString("\"%s\"", PromiseFlatCString(aLocalName).get()),
+      aFound ? "found"_ns : "not found"_ns,
+      nsPrintfCString("font-family \"%s\"",
+                      PromiseFlatCString(aFamilyName).get()));
 }
 
 void FontFaceSetImpl::DestroyLoaders() {

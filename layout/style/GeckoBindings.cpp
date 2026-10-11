@@ -14,6 +14,8 @@
 #include "gfxMathTable.h"
 #include "gfxTextRun.h"
 #include "imgLoader.h"
+#include "mozilla/ApiAudit.h"
+#include "mozilla/ApiAuditScripts.h"
 #include "mozilla/AttributeStyles.h"
 #include "mozilla/ClearOnShutdown.h"
 #include "mozilla/DeclarationBlock.h"
@@ -1671,6 +1673,27 @@ bool Gecko_IsInServoTraversal() { return ServoStyleSet::IsInServoTraversal(); }
 bool Gecko_IsMainThread() { return NS_IsMainThread(); }
 
 bool Gecko_IsDOMWorkerThread() { return !!GetCurrentThreadWorkerPrivate(); }
+
+bool Gecko_ApiAudit_IsEnabled() { return apiaudit::IsEnabled(); }
+
+void Gecko_ApiAudit_RecordStyleCondition(const Document* aDocument,
+                                         uint8_t aKind,
+                                         const nsACString* aCondition,
+                                         bool aMatches,
+                                         URLExtraData* aURLData) {
+  static const char* const kNames[] = {"CSS.@media", "CSS.@supports",
+                                       "CSS.@import media",
+                                       "CSS.stylesheet media"};
+  if (aKind >= std::size(kNames)) {
+    return;
+  }
+  nsAutoCString source;
+  if (aURLData && aURLData->BaseURI()) {
+    aURLData->BaseURI()->GetSpec(source);
+  }
+  apiaudit::RecordForDocument(aDocument, kNames[aKind], *aCondition,
+                              aMatches ? "matches"_ns : "no match"_ns, source);
+}
 
 int32_t Gecko_GetNumStyleThreads() {
   if (const auto& cpuInfo = hal::GetHeterogeneousCpuInfo()) {

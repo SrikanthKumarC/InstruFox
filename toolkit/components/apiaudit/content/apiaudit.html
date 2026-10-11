@@ -83,6 +83,7 @@
         <div id="views">
           <button data-view="apis">APIs</button>
           <button data-view="code" id="view-code">Code</button>
+          <button data-view="network" id="view-network">Network</button>
         </div>
         <div class="table-wrap" id="apis-view">
           <table>
@@ -94,6 +95,7 @@
                 <th data-sort="count" class="num">Calls</th>
                 <th>Contexts</th>
                 <th>Arguments</th>
+                <th>Results</th>
                 <th>Callers</th>
               </tr>
             </thead>
@@ -102,6 +104,42 @@
         </div>
         <div class="table-wrap" id="code-view" hidden>
           <div id="code-list"></div>
+        </div>
+        <div class="table-wrap" id="network-view" hidden>
+          <div id="network-summary"></div>
+          <h3>Requests</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Method</th>
+                <th>Type</th>
+                <th class="num">Status</th>
+                <th>URL</th>
+                <th>Tracking protection</th>
+                <th class="num">Body</th>
+                <th>Cookies sent</th>
+              </tr>
+            </thead>
+            <tbody id="request-rows"></tbody>
+          </table>
+          <h3>Cookie changes</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Action</th>
+                <th>Host</th>
+                <th>Name</th>
+                <th>Value</th>
+                <th>Expiry</th>
+                <th>Flags</th>
+              </tr>
+            </thead>
+            <tbody id="cookie-rows"></tbody>
+          </table>
+          <h3>Firefox tracking protection log</h3>
+          <div id="blocking-log"></div>
         </div>
         <p id="status"></p>
       </section>

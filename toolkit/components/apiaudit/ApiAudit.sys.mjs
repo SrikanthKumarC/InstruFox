@@ -4,6 +4,8 @@
 
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
+  ApiAuditNetwork:
+    "moz-src:///toolkit/components/apiaudit/ApiAuditNetwork.sys.mjs",
   // Only reached from the browser-window-delayed-startup category.
   CustomizableUI:
     // eslint-disable-next-line mozilla/no-browser-refs-in-toolkit
@@ -50,6 +52,8 @@ export const ApiAudit = {
       includeParent: true,
       safeForUntrustedWebProcess: true,
     });
+
+    lazy.ApiAuditNetwork.start();
 
     lazy.CustomizableUI.createWidget({
       id: WIDGET_ID,
@@ -175,7 +179,16 @@ export const ApiAudit = {
     return windows;
   },
 
+  /**
+   * Returns the network requests, cookie changes and content blocking logs
+   * recorded in the parent process.
+   */
+  collectNetwork() {
+    return lazy.ApiAuditNetwork.collect();
+  },
+
   async clear() {
+    lazy.ApiAuditNetwork.clear();
     await this._queryAllProcesses("ApiAudit:Clear");
     if (this.enabled) {
       this.session = { start: Date.now(), stop: null };

@@ -42,6 +42,7 @@
 #include "js/StreamConsumer.h"
 #include "util/StringBuilder.h"
 #include "util/Text.h"
+#include "vm/BuiltinAudit.h"
 #include "vm/ErrorObject.h"
 #include "vm/FunctionFlags.h"      // js::FunctionFlags
 #include "vm/GlobalObject.h"       // js::GlobalObject
@@ -1081,8 +1082,15 @@ static bool CheckLimits(JSContext* cx, uint64_t validationMax, LimitsKind kind,
   return true;
 }
 
+static constexpr char kAudit_new_WebAssembly_Module[] =
+    "new WebAssembly.Module()";
+
 template <class Class, const char* name>
 static JSObject* CreateWasmConstructor(JSContext* cx, JSProtoKey key) {
+  constexpr JSNative construct =
+      std::is_same_v<Class, WasmModuleObject>
+          ? AuditedNative<Class::construct, kAudit_new_WebAssembly_Module>
+          : Class::construct;
   Rooted<JSAtom*> className(cx, Atomize(cx, name, strlen(name)));
   if (!className) {
     return nullptr;
@@ -1097,12 +1105,12 @@ static JSObject* CreateWasmConstructor(JSContext* cx, JSProtoKey key) {
         return nullptr;
       }
       return NewFunctionWithProto(
-          cx, Class::construct, 1, FunctionFlags::NATIVE_CTOR, nullptr,
-          className, proto, gc::AllocKind::FUNCTION, TenuredObject);
+          cx, construct, 1, FunctionFlags::NATIVE_CTOR, nullptr, className,
+          proto, gc::AllocKind::FUNCTION, TenuredObject);
     }
   }
 #endif
-  return NewNativeConstructor(cx, Class::construct, 1, className);
+  return NewNativeConstructor(cx, construct, 1, className);
 }
 
 static JSObject* GetWasmConstructorPrototype(JSContext* cx,
@@ -6221,14 +6229,20 @@ static const JSFunctionSpec WebAssembly_mozIntGemm_methods[] = {
 
 #endif  // ENABLE_WASM_MOZ_INTGEMM
 
+static constexpr char kAudit_WebAssembly_compile[] = "WebAssembly.compile()";
+static constexpr char kAudit_WebAssembly_instantiate[] = "WebAssembly.instantiate()";
+static constexpr char kAudit_WebAssembly_validate[] = "WebAssembly.validate()";
+static constexpr char kAudit_WebAssembly_compileStreaming[] = "WebAssembly.compileStreaming()";
+static constexpr char kAudit_WebAssembly_instantiateStreaming[] = "WebAssembly.instantiateStreaming()";
+
 static const JSFunctionSpec WebAssembly_static_methods[] = {
     JS_FN("toSource", WebAssembly_toSource, 0, 0),
-    JS_FN("compile", WebAssembly_compile, 1, JSPROP_ENUMERATE),
-    JS_FN("instantiate", WebAssembly_instantiate, 1, JSPROP_ENUMERATE),
-    JS_FN("validate", WebAssembly_validate, 1, JSPROP_ENUMERATE),
-    JS_FN("compileStreaming", WebAssembly_compileStreaming, 1,
+    JS_FN("compile", (AuditedNative<WebAssembly_compile, kAudit_WebAssembly_compile>), 1, JSPROP_ENUMERATE),
+    JS_FN("instantiate", (AuditedNative<WebAssembly_instantiate, kAudit_WebAssembly_instantiate>), 1, JSPROP_ENUMERATE),
+    JS_FN("validate", (AuditedNative<WebAssembly_validate, kAudit_WebAssembly_validate>), 1, JSPROP_ENUMERATE),
+    JS_FN("compileStreaming", (AuditedNative<WebAssembly_compileStreaming, kAudit_WebAssembly_compileStreaming>), 1,
           JSPROP_ENUMERATE),
-    JS_FN("instantiateStreaming", WebAssembly_instantiateStreaming, 1,
+    JS_FN("instantiateStreaming", (AuditedNative<WebAssembly_instantiateStreaming, kAudit_WebAssembly_instantiateStreaming>), 1,
           JSPROP_ENUMERATE),
     JS_FS_END,
 };

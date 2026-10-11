@@ -31,6 +31,7 @@
 #include "js/PropertySpec.h"
 #include "util/DifferentialTesting.h"
 #include "util/RandomSeed.h"
+#include "vm/BuiltinAudit.h"
 #include "vm/Float16.h"
 #include "vm/Interpreter.h"
 #include "vm/JSContext.h"
@@ -1203,17 +1204,33 @@ const char* js::GetUnaryMathFunctionName(UnaryMathFunction fun, bool enumName) {
   MOZ_CRASH("Unknown function");
 }
 
+static constexpr char kAudit_Math_acos[] = "Math.acos()";
+static constexpr char kAudit_Math_acosh[] = "Math.acosh()";
+static constexpr char kAudit_Math_asin[] = "Math.asin()";
+static constexpr char kAudit_Math_asinh[] = "Math.asinh()";
+static constexpr char kAudit_Math_atan[] = "Math.atan()";
+static constexpr char kAudit_Math_atanh[] = "Math.atanh()";
+static constexpr char kAudit_Math_sin[] = "Math.sin()";
+static constexpr char kAudit_Math_sinh[] = "Math.sinh()";
+static constexpr char kAudit_Math_cos[] = "Math.cos()";
+static constexpr char kAudit_Math_cosh[] = "Math.cosh()";
+static constexpr char kAudit_Math_tan[] = "Math.tan()";
+static constexpr char kAudit_Math_tanh[] = "Math.tanh()";
+static constexpr char kAudit_Math_exp[] = "Math.exp()";
+static constexpr char kAudit_Math_expm1[] = "Math.expm1()";
+static constexpr char kAudit_Math_log1p[] = "Math.log1p()";
+
 static const JSFunctionSpec math_static_methods[] = {
     JS_FN("toSource", math_toSource, 0, 0),
     JS_INLINABLE_FN("abs", math_abs, 1, 0, MathAbs),
-    JS_INLINABLE_FN("acos", math_acos, 1, 0, MathACos),
-    JS_INLINABLE_FN("asin", math_asin, 1, 0, MathASin),
-    JS_INLINABLE_FN("atan", math_atan, 1, 0, MathATan),
+    JS_INLINABLE_FN("acos", (AuditedNative<math_acos, kAudit_Math_acos>), 1, 0, MathACos),
+    JS_INLINABLE_FN("asin", (AuditedNative<math_asin, kAudit_Math_asin>), 1, 0, MathASin),
+    JS_INLINABLE_FN("atan", (AuditedNative<math_atan, kAudit_Math_atan>), 1, 0, MathATan),
     JS_INLINABLE_FN("atan2", math_atan2, 2, 0, MathATan2),
     JS_INLINABLE_FN("ceil", math_ceil, 1, 0, MathCeil),
     JS_INLINABLE_FN("clz32", math_clz32, 1, 0, MathClz32),
-    JS_INLINABLE_FN("cos", math_cos, 1, 0, MathCos),
-    JS_INLINABLE_FN("exp", math_exp, 1, 0, MathExp),
+    JS_INLINABLE_FN("cos", (AuditedNative<math_cos, kAudit_Math_cos>), 1, 0, MathCos),
+    JS_INLINABLE_FN("exp", (AuditedNative<math_exp, kAudit_Math_exp>), 1, 0, MathExp),
     JS_INLINABLE_FN("floor", math_floor, 1, 0, MathFloor),
     JS_INLINABLE_FN("imul", math_imul, 2, 0, MathImul),
     JS_INLINABLE_FN("fround", math_fround, 1, 0, MathFRound),
@@ -1224,19 +1241,19 @@ static const JSFunctionSpec math_static_methods[] = {
     JS_INLINABLE_FN("pow", math_pow, 2, 0, MathPow),
     JS_INLINABLE_FN("random", math_random, 0, 0, MathRandom),
     JS_INLINABLE_FN("round", math_round, 1, 0, MathRound),
-    JS_INLINABLE_FN("sin", math_sin, 1, 0, MathSin),
+    JS_INLINABLE_FN("sin", (AuditedNative<math_sin, kAudit_Math_sin>), 1, 0, MathSin),
     JS_INLINABLE_FN("sqrt", math_sqrt, 1, 0, MathSqrt),
-    JS_INLINABLE_FN("tan", math_tan, 1, 0, MathTan),
+    JS_INLINABLE_FN("tan", (AuditedNative<math_tan, kAudit_Math_tan>), 1, 0, MathTan),
     JS_INLINABLE_FN("log10", math_log10, 1, 0, MathLog10),
     JS_INLINABLE_FN("log2", math_log2, 1, 0, MathLog2),
-    JS_INLINABLE_FN("log1p", math_log1p, 1, 0, MathLog1P),
-    JS_INLINABLE_FN("expm1", math_expm1, 1, 0, MathExpM1),
-    JS_INLINABLE_FN("cosh", math_cosh, 1, 0, MathCosH),
-    JS_INLINABLE_FN("sinh", math_sinh, 1, 0, MathSinH),
-    JS_INLINABLE_FN("tanh", math_tanh, 1, 0, MathTanH),
-    JS_INLINABLE_FN("acosh", math_acosh, 1, 0, MathACosH),
-    JS_INLINABLE_FN("asinh", math_asinh, 1, 0, MathASinH),
-    JS_INLINABLE_FN("atanh", math_atanh, 1, 0, MathATanH),
+    JS_INLINABLE_FN("log1p", (AuditedNative<math_log1p, kAudit_Math_log1p>), 1, 0, MathLog1P),
+    JS_INLINABLE_FN("expm1", (AuditedNative<math_expm1, kAudit_Math_expm1>), 1, 0, MathExpM1),
+    JS_INLINABLE_FN("cosh", (AuditedNative<math_cosh, kAudit_Math_cosh>), 1, 0, MathCosH),
+    JS_INLINABLE_FN("sinh", (AuditedNative<math_sinh, kAudit_Math_sinh>), 1, 0, MathSinH),
+    JS_INLINABLE_FN("tanh", (AuditedNative<math_tanh, kAudit_Math_tanh>), 1, 0, MathTanH),
+    JS_INLINABLE_FN("acosh", (AuditedNative<math_acosh, kAudit_Math_acosh>), 1, 0, MathACosH),
+    JS_INLINABLE_FN("asinh", (AuditedNative<math_asinh, kAudit_Math_asinh>), 1, 0, MathASinH),
+    JS_INLINABLE_FN("atanh", (AuditedNative<math_atanh, kAudit_Math_atanh>), 1, 0, MathATanH),
     JS_INLINABLE_FN("hypot", math_hypot, 2, 0, MathHypot),
     JS_INLINABLE_FN("trunc", math_trunc, 1, 0, MathTrunc),
     JS_INLINABLE_FN("sign", math_sign, 1, 0, MathSign),

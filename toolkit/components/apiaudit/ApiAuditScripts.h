@@ -11,14 +11,23 @@
 #include "js/SourceText.h"
 #include "js/TypeDecls.h"
 #include "mozilla/MaybeOneOf.h"
+#include "mozilla/UniquePtr.h"
 #include "mozilla/Utf8.h"
+#include "nsString.h"
 
 class nsIURI;
 
-// Captures code that runs in web content but is not visible through the
-// WebIDL bindings: worker scripts (including blob: and data: workers) and
-// strings compiled with eval(), Function() or WebAssembly.
-namespace mozilla::apiaudit {
+// Captures code and observations of web content that are not visible through
+// the WebIDL bindings: worker scripts (including blob: and data: workers),
+// strings compiled with eval() or Function(), inline event handlers,
+// javascript: URLs, WebAssembly modules and stylesheet conditions.
+namespace mozilla {
+
+namespace dom {
+class Document;
+}
+
+namespace apiaudit {
 
 using MaybeSourceText =
     MaybeOneOf<JS::SourceText<char16_t>, JS::SourceText<Utf8Unit>>;
@@ -37,6 +46,49 @@ void RecordDynamicCode(JSContext* aCx, JS::RuntimeCode aKind,
                        JS::CompilationType aCompilationType,
                        JS::Handle<JSString*> aCode);
 
-}  // namespace mozilla::apiaudit
+// Records code compiled from a string, such as an inline event handler
+// attribute or a javascript: URL, in the context of aCx's global.
+void RecordCodeText(JSContext* aCx, const char* aKind, const nsACString& aURL,
+                    const nsAString& aText);
+
+// Records an observation of aDocument that does not go through a binding,
+// such as a media query evaluated in a stylesheet. aName is a string literal;
+// aSource is where the observation comes from, such as a stylesheet URL.
+// May be called off the main thread.
+void RecordForDocument(const dom::Document* aDocument, const char* aName,
+                       const nsACString& aArg, const nsACString& aResult,
+                       const nsACString& aSource);
+
+// Captures the bytes of a streamed WebAssembly module as they are read, on
+// any thread, and records them when the stream ends.
+class StreamCapture final {
+ public:
+  // Returns null if recording is disabled or aCx runs system code.
+  static UniquePtr<StreamCapture> Create(JSContext* aCx, const char* aKind,
+                                         const nsACString& aURL);
+
+  void Append(const uint8_t* aData, uint32_t aLength);
+  void Finish();
+
+ private:
+  StreamCapture(uint64_t aWindowKey, uint64_t aSerial, const char* aKind,
+                const nsACString& aURL, uint32_t aMaxLength)
+      : mWindowKey(aWindowKey),
+        mSerial(aSerial),
+        mKind(aKind),
+        mURL(aURL),
+        mMaxLength(aMaxLength) {}
+
+  const uint64_t mWindowKey;
+  const uint64_t mSerial;
+  const char* const mKind;
+  const nsCString mURL;
+  const uint32_t mMaxLength;
+  nsCString mBytes;
+  uint64_t mLength = 0;
+};
+
+}  // namespace apiaudit
+}  // namespace mozilla
 
 #endif  // mozilla_ApiAuditScripts_h

@@ -18,6 +18,7 @@
 #include "builtin/intl/ParameterNegotiation.h"
 #include "gc/GCContext.h"
 #include "js/PropertySpec.h"
+#include "vm/BuiltinAudit.h"
 #include "vm/GlobalObject.h"
 #include "vm/JSContext.h"
 #include "vm/PlainObject.h"
@@ -65,8 +66,10 @@ static const JSFunctionSpec pluralRules_static_methods[] = {
     JS_FS_END,
 };
 
+static constexpr char kAudit_Intl_PluralRules_resolvedOptions[] = "Intl.PluralRules.resolvedOptions()";
+
 static const JSFunctionSpec pluralRules_methods[] = {
-    JS_FN("resolvedOptions", pluralRules_resolvedOptions, 0, 0),
+    JS_FN("resolvedOptions", (AuditedNative<pluralRules_resolvedOptions, kAudit_Intl_PluralRules_resolvedOptions>), 0, 0),
     JS_FN("select", pluralRules_select, 1, 0),
     JS_FN("selectRange", pluralRules_selectRange, 2, 0),
     JS_FN("toSource", pluralRules_toSource, 0, 0),

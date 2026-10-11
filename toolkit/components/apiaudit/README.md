@@ -1,16 +1,46 @@
 # API Audit
 
 Records every WebIDL method, getter, setter and constructor that web content
-invokes, in every content process and in dedicated workers, and shows them in
-a window ranked by privacy risk.
+invokes, with its arguments and what it returned, in every content process and
+in workers; the JS builtins that reveal the time zone, locale and floating
+point behavior; the conditions stylesheets evaluate; the code pages compile;
+and the network requests and cookies they produce. Shows them in a window
+ranked by privacy risk.
 
 ## Upstream touch points
 
 Everything lives in this directory except:
 
-- `dom/bindings/Codegen.py`: `CGPerSignatureCall.apiAuditCall` emits a call to
-  `mozilla::apiaudit::Record*` at the top of every generated binding member,
-  and `mozilla/ApiAudit.h` is added to generated binding includes.
+- `dom/bindings/Codegen.py`: `CGPerSignatureCall.apiAuditCall` emits a
+  recorder (`AutoRecordMethod`, `AutoRecordGetter`, `RecordSetter` or
+  `RecordKey`) at the top of every generated binding member and named or
+  indexed property operation, `CGSpecializedGetter` emits the getter recorder
+  before the cached-slot early return, and `mozilla/ApiAudit.h` is added to
+  generated binding includes.
+- `js/src/jsfriendapi.{h,cpp}` and `js/src/vm/BuiltinAudit.h`:
+  `js::SetBuiltinAuditHook` and the `AuditedNative` wrapper. The function
+  specs of the wrapped builtins use `AuditedNative<native, name>`:
+  `Date.getTimezoneOffset/toString/toTimeString/toLocale*String`
+  (`js/src/builtin/Date.cpp`), every `Intl.*.resolvedOptions` and
+  `Intl.supportedValuesOf` (`js/src/builtin/intl/`),
+  `Temporal.Now.timeZoneId` (`js/src/builtin/temporal/TemporalNow.cpp`), the
+  transcendental `Math` functions (`js/src/builtin/Math.cpp`), and
+  `WebAssembly.compile/instantiate/validate/compileStreaming/
+  instantiateStreaming` and the `WebAssembly.Module` constructor
+  (`js/src/wasm/WasmJS.cpp`).
+- `dom/fetch/FetchUtil.cpp` (`JSStreamConsumer`): copies the bytes of
+  streamed WebAssembly modules to an `apiaudit::StreamCapture`.
+- `dom/events/EventListenerManager.cpp` (`CompileEventHandlerInternal`) and
+  `dom/jsurl/nsJSProtocolHandler.cpp` (`JSURLInputStream::EvaluateScript`):
+  one `RecordCodeText` call each, for inline event handler attributes and
+  `javascript:` URLs.
+- `gfx/thebes/gfxUserFontSet.{h,cpp}` (`gfxUserFontSet::RecordLocalFontLookup`,
+  called from `gfxUserFontEntry::LoadNextSrc`) and
+  `layout/style/FontFaceSetImpl.{h,cpp}`: records `src: local()` lookups.
+- `servo/components/style/stylist.rs` (`CascadeData::add_rule_list` and
+  `CascadeData::add_stylesheet`) and `layout/style/GeckoBindings.{h,cpp}`
+  (`Gecko_ApiAudit_*`): records the `@media`, `@supports` and `@import`
+  conditions and the media lists of author stylesheets.
 - `dom/workers/ScriptLoader.cpp` (`WorkerScriptLoader::EvaluateScript`): one
   `RecordScriptSource` call, which captures the source of every classic and
   `importScripts()` worker script, including blob: and data: workers.
@@ -39,11 +69,46 @@ When rebasing onto a newer mozilla-central, only those lines can conflict.
   window's main thread and each worker it started (nested workers included).
   Shared and service workers, which have no window, get their own entry; the
   window keeps the id of the service worker controlling it.
-  For each API it keeps the call count, up to 24 distinct first arguments and
-  up to 12 distinct calling scripts (`url:line:col`). For each context it keeps
-  up to 64 distinct pieces of code (worker scripts, `eval`/`Function`
-  strings), each truncated to `privacy.apiaudit.maxCodeLength` characters
-  (default 524288).
+  For each API it keeps the call count, up to 24 distinct first arguments,
+  up to 12 distinct calling scripts (`url:line:col`) and, from the first 128
+  calls, up to 64 distinct calls: all their arguments (up to 8), their result
+  and the first script that made them. For each context it keeps up to 256
+  distinct pieces of code (worker scripts, `eval`/`Function` strings, inline
+  event handlers, `javascript:` URLs, WebAssembly modules), each truncated to
+  `privacy.apiaudit.maxCodeLength` characters (default 524288).
+- Arguments are described after the call returns, so typed arrays that the
+  callee fills in (`getFloatFrequencyData()`, `readPixels()`) show their new
+  contents. Values are described without running page script: strings are
+  cut at 200 characters and followed by their full length and a hash, typed
+  arrays and `ArrayBuffer`s by their length and a hash of their bytes, arrays
+  and plain objects (dictionaries) by their elements up to two levels deep,
+  and other objects by their class. When a method returns a promise, the
+  call is recorded once the promise settles, with what it resolved or
+  rejected with (`getHighEntropyValues()`, `enumerateDevices()`,
+  `StorageManager.estimate()`). A call that throws records the exception.
+- Setters record the value being assigned (`Document.cookie=`). Named and
+  indexed property operations record the property name, and the value for
+  assignments (`localStorage.foo = ...` is recorded as `Storage.setItem()`).
+- `[Cached]` and `[StoreInSlot]` attributes are recorded on every read the
+  binding sees, including reads served from the slot.
+- The JS builtins listed above are recorded through `js::SetBuiltinAuditHook`
+  under names such as `Date.getTimezoneOffset()`, `Intl.DateTimeFormat.
+  resolvedOptions()` and `Math.tan()`. The bytes of WebAssembly modules,
+  whether passed as a buffer or streamed from a `Response`, are captured as
+  base64 code entries of kind `wasm`.
+- Author stylesheets record each `@media`, `@supports` and `@import` media
+  condition and the media list of the stylesheet itself as `CSS.@media`,
+  `CSS.@supports`, `CSS.@import media` and `CSS.stylesheet media`, with
+  "matches" or "no match" and the stylesheet URL as the caller. User agent
+  and user stylesheets are ignored. `src: local()` lookups are recorded as
+  `CSS.@font-face local()` with "found" or "not found".
+- `ApiAuditNetwork.sys.mjs` records, in the parent process, every HTTP request
+  made for web content: URL, method, type, status, request and response
+  headers (cookies included), the request body (up to 64 KiB, base64 when
+  binary), the remote address and the tracking protection classification
+  (`nsIClassifiedChannel` flags and matched lists). It also records every
+  cookie change (`cookie-changed`), and `collectNetwork()` returns the content
+  blocking log of each tab.
   Calls made by system-principal code (browser chrome, actors,
   `SpecialPowers`) are ignored. Records of closed windows are kept for
   `privacy.apiaudit.retainSeconds` (default 600).
@@ -56,16 +121,23 @@ When rebasing onto a newer mozilla-central, only those lines can conflict.
   argument; string `setTimeout()`/`setInterval()` calls are captured as code
   too.
 - The "API Audit" toolbar button opens `chrome://global/content/apiaudit/apiaudit.html`.
+  Expanding an API row lists its distinct calls with their arguments and
+  results. The Network view lists the requests, cookie changes and content
+  blocking log of the selection; click a request for its headers, body and
+  classification.
   Its sidebar groups everything by tab (or by site when there is no tab):
   each page load in the tab, then each frame and worker. Selecting any level
   shows the APIs and code of everything below it. Expanding an `eval`,
   `Function`, `setTimeout`, `setInterval`, `Worker` or `importScripts` row
   shows the code it ran.
   Its Code view lists captured code, with blob:/data: workers and dynamic code
-  flagged; "Copy all" copies the selected page's report, code included, as
-  JSON. "Copy summary" copies a Markdown summary of the selection: every API
-  with its call count, grouped by category, plus contexts and the list of
-  captured code (without its text). Service workers are listed under the pages they control or that
+  flagged; WebAssembly modules can be saved as `.wasm` files. "Copy all"
+  copies the selected page's report as JSON: every API with its calls and
+  results, the captured code, and the network requests, cookie changes and
+  content blocking log. "Copy summary" copies a Markdown summary of the
+  selection: every API with its call count and results, grouped by category,
+  the contexts, the list of captured code (without its text), and the hosts
+  contacted and cookies changed. Service workers are listed under the pages they control or that
   registered them, and shared workers under the pages that constructed them
   (matched on the resolved `new SharedWorker()` URL).
 - Arguments that wrap a string in a DOM object (`TrustedScriptURL`,
@@ -110,16 +182,32 @@ task as a console call show up in the serialized message; `console.table`
 on an object that changes keeps showing the state of the last task before
 the message was serialized.
 
+Pages can also hide code from DevTools by running it in a blob: or data:
+worker that closes itself right away, before anyone can attach to it. While
+`privacy.apiaudit.hideDevTools` is true, such workers stay in the DevTools
+worker list after they close, reported with the `isTerminated` trait
+(`WorkerDescriptorFront.isTerminated`); their code is in the Code view. This
+touches `devtools/server/actors/descriptors/worker.js`,
+`devtools/server/actors/worker/worker-descriptor-actor-list.js` and
+`devtools/client/fronts/descriptors/worker.js`.
+
 ## Not covered
 
-APIs that are not WebIDL members: JS built-ins (`Intl`, `Date`), CSS media
-queries evaluated by stylesheets, font metrics observed through layout,
-HTTP headers. Attribute reads that the JIT serves from a cached slot
-(`[StoreInSlot]`/`[Cached]`) are only recorded on the first read. Event
-handler attributes (`onclick="..."`), `javascript:` URLs and WebAssembly
-module bytes are not captured. A shared worker started with a URL that the
-page computed without passing a string, `URL` or `TrustedScriptURL` cannot
-be linked and stays a separate entry.
+JS builtins other than the ones listed above, such as `Function.prototype.
+toString` or `Error.prototype.stack`. Builtins and binding getters that Ion
+inlines or serves from a slot (`[StoreInSlot]` attributes, `[Pure]` getters
+hoisted out of loops, `Math` functions) are recorded on the calls made before
+the code is compiled, so their call counts are lower bounds; every calling
+script is still seen. Values are described without running page script, so
+DOM objects are only described by their class (their attributes are recorded
+when the page reads them). Results of named and indexed property reads are
+not recorded. Font metrics observed through layout show up only as the
+results of the geometry getters that read them. Container queries and other
+stylesheet conditions evaluated during selector matching are not recorded.
+Network requests made before the first browser window opened are not
+recorded. A shared worker started with a URL that the page computed without
+passing a string, `URL` or `TrustedScriptURL` cannot be linked and stays a
+separate entry.
 
 DevTools detection not covered: the deferred console serialization still
 runs on the target thread, so a page measuring event-loop lag (for example

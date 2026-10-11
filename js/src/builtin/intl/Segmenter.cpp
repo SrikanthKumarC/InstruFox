@@ -33,6 +33,7 @@
 #include "js/Value.h"
 #include "util/Unicode.h"
 #include "vm/ArrayObject.h"
+#include "vm/BuiltinAudit.h"
 #include "vm/GlobalObject.h"
 #include "vm/JSContext.h"
 #include "vm/PlainObject.h"
@@ -77,8 +78,10 @@ static const JSFunctionSpec segmenter_static_methods[] = {
     JS_FS_END,
 };
 
+static constexpr char kAudit_Intl_Segmenter_resolvedOptions[] = "Intl.Segmenter.resolvedOptions()";
+
 static const JSFunctionSpec segmenter_methods[] = {
-    JS_FN("resolvedOptions", segmenter_resolvedOptions, 0, 0),
+    JS_FN("resolvedOptions", (AuditedNative<segmenter_resolvedOptions, kAudit_Intl_Segmenter_resolvedOptions>), 0, 0),
     JS_FN("segment", segmenter_segment, 1, 0),
     JS_FN("toSource", segmenter_toSource, 0, 0),
     JS_FS_END,

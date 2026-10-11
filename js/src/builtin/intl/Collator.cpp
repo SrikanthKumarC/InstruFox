@@ -25,6 +25,7 @@
 #include "js/PropertySpec.h"
 #include "js/StableStringChars.h"
 #include "js/TypeDecls.h"
+#include "vm/BuiltinAudit.h"
 #include "vm/GlobalObject.h"
 #include "vm/JSContext.h"
 #include "vm/PlainObject.h"  // js::PlainObject
@@ -70,8 +71,10 @@ static const JSFunctionSpec collator_static_methods[] = {
     JS_FS_END,
 };
 
+static constexpr char kAudit_Intl_Collator_resolvedOptions[] = "Intl.Collator.resolvedOptions()";
+
 static const JSFunctionSpec collator_methods[] = {
-    JS_FN("resolvedOptions", collator_resolvedOptions, 0, 0),
+    JS_FN("resolvedOptions", (AuditedNative<collator_resolvedOptions, kAudit_Intl_Collator_resolvedOptions>), 0, 0),
     JS_FN("toSource", collator_toSource, 0, 0),
     JS_FS_END,
 };

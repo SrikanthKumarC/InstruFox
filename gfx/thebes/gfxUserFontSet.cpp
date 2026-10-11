@@ -495,6 +495,7 @@ void gfxUserFontEntry::DoLoadNextSrc(bool aIsContinue) {
         // Note that we've attempted a local lookup, even if it failed,
         // as this means we are dependent on any updates to the font list.
         mSeenLocalSource = true;
+        fontSet->RecordLocalFontLookup(currSrc.mLocalName, FamilyName(), !!fe);
         nsTArray<RefPtr<gfxUserFontSet>> fontSets;
         GetUserFontSets(fontSets);
         for (gfxUserFontSet* fontSet : fontSets) {

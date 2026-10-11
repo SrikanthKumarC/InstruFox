@@ -3232,6 +3232,128 @@ impl Default for StylistImplicitScopeRoot {
     }
 }
 
+/// Kinds of author stylesheet conditions reported to API Audit, matching
+/// Gecko_ApiAudit_RecordStyleCondition.
+#[cfg(feature = "gecko")]
+#[repr(u8)]
+enum AuditedStyleCondition {
+    Media = 0,
+    Supports = 1,
+    ImportMedia = 2,
+    SheetMedia = 3,
+}
+
+#[cfg(feature = "gecko")]
+fn audit_author_contents<'a, S>(
+    stylesheet: &'a S,
+    guard: &'a SharedRwLockReadGuard,
+) -> Option<&'a StylesheetContents>
+where
+    S: StylesheetInDocument + 'static,
+{
+    let contents = stylesheet.contents(guard);
+    if contents.origin != Origin::Author ||
+        !unsafe { crate::gecko_bindings::bindings::Gecko_ApiAudit_IsEnabled() }
+    {
+        return None;
+    }
+    Some(contents)
+}
+
+#[cfg(feature = "gecko")]
+fn audit_record_style_condition(
+    kind: AuditedStyleCondition,
+    condition: String,
+    matches: bool,
+    device: &Device,
+    contents: &StylesheetContents,
+) {
+    let condition = nsstring::nsCString::from(condition);
+    unsafe {
+        crate::gecko_bindings::bindings::Gecko_ApiAudit_RecordStyleCondition(
+            device.document(),
+            kind as u8,
+            &*condition,
+            matches,
+            contents.url_data.ptr(),
+        );
+    }
+}
+
+/// Reports the result of an @media, @supports or @import condition of an
+/// author stylesheet: stylesheets can probe the user's device and preferences
+/// without running script.
+#[cfg(feature = "gecko")]
+fn audit_style_condition<S>(
+    rule: &CssRule,
+    effective: bool,
+    device: &Device,
+    stylesheet: &S,
+    guard: &SharedRwLockReadGuard,
+) where
+    S: StylesheetInDocument + 'static,
+{
+    use style_traits::ToCss;
+    if !matches!(
+        *rule,
+        CssRule::Media(..) | CssRule::Supports(..) | CssRule::Import(..)
+    ) {
+        return;
+    }
+    let Some(contents) = audit_author_contents(stylesheet, guard) else {
+        return;
+    };
+    let (kind, condition) = match *rule {
+        CssRule::Media(ref media_rule) => (
+            AuditedStyleCondition::Media,
+            media_rule.media_queries.read_with(guard).to_css_string(),
+        ),
+        CssRule::Supports(ref supports_rule) => (
+            AuditedStyleCondition::Supports,
+            supports_rule.condition.to_css_string(),
+        ),
+        CssRule::Import(ref lock) => {
+            let import_rule = lock.read_with(guard);
+            match import_rule.stylesheet.media(guard) {
+                Some(media) if !media.is_empty() => {
+                    (AuditedStyleCondition::ImportMedia, media.to_css_string())
+                },
+                _ => return,
+            }
+        },
+        _ => return,
+    };
+    audit_record_style_condition(kind, condition, effective, device, contents);
+}
+
+/// Reports the result of the media list of an author stylesheet, such as the
+/// media attribute of a <link> or <style> element.
+#[cfg(feature = "gecko")]
+fn audit_stylesheet_media<S>(
+    effective: bool,
+    device: &Device,
+    stylesheet: &S,
+    guard: &SharedRwLockReadGuard,
+) where
+    S: StylesheetInDocument + 'static,
+{
+    use style_traits::ToCss;
+    let Some(contents) = audit_author_contents(stylesheet, guard) else {
+        return;
+    };
+    let condition = match stylesheet.media(guard) {
+        Some(media) if !media.is_empty() => media.to_css_string(),
+        _ => return,
+    };
+    audit_record_style_condition(
+        AuditedStyleCondition::SheetMedia,
+        condition,
+        effective,
+        device,
+        contents,
+    );
+}
+
 /// Data resulting from performing the CSS cascade that is specific to a given
 /// origin.
 ///
@@ -4215,6 +4337,8 @@ impl CascadeData {
                 guard,
                 &mut effective,
             );
+            #[cfg(feature = "gecko")]
+            audit_style_condition(rule, effective, device, stylesheet, guard);
             if !effective {
                 continue;
             }
@@ -4509,7 +4633,10 @@ impl CascadeData {
             return Ok(());
         }
 
-        if !stylesheet.is_effective_for_device(device, &self.custom_media, guard) {
+        let effective = stylesheet.is_effective_for_device(device, &self.custom_media, guard);
+        #[cfg(feature = "gecko")]
+        audit_stylesheet_media(effective, device, stylesheet, guard);
+        if !effective {
             return Ok(());
         }
 

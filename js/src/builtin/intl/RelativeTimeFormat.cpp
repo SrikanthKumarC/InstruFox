@@ -21,6 +21,7 @@
 #include "js/friend/ErrorMessages.h"  // js::GetErrorMessage, JSMSG_*
 #include "js/Printer.h"
 #include "js/PropertySpec.h"
+#include "vm/BuiltinAudit.h"
 #include "vm/GlobalObject.h"
 #include "vm/JSContext.h"
 #include "vm/PlainObject.h"
@@ -71,8 +72,10 @@ static const JSFunctionSpec relativeTimeFormat_static_methods[] = {
     JS_FS_END,
 };
 
+static constexpr char kAudit_Intl_RelativeTimeFormat_resolvedOptions[] = "Intl.RelativeTimeFormat.resolvedOptions()";
+
 static const JSFunctionSpec relativeTimeFormat_methods[] = {
-    JS_FN("resolvedOptions", relativeTimeFormat_resolvedOptions, 0, 0),
+    JS_FN("resolvedOptions", (AuditedNative<relativeTimeFormat_resolvedOptions, kAudit_Intl_RelativeTimeFormat_resolvedOptions>), 0, 0),
     JS_FN("format", relativeTimeFormat_format, 2, 0),
     JS_FN("formatToParts", relativeTimeFormat_formatToParts, 2, 0),
     JS_FN("toSource", relativeTimeFormat_toSource, 0, 0),

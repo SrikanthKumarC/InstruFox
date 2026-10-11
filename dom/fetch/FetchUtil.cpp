@@ -6,6 +6,7 @@
 
 #include "js/BuildId.h"
 #include "js/friend/ErrorMessages.h"  // JSMSG_*
+#include "mozilla/ApiAuditScripts.h"
 #include "mozilla/ClearOnShutdown.h"
 #include "mozilla/dom/DOMException.h"
 #include "mozilla/dom/Document.h"
@@ -366,6 +367,7 @@ class JSStreamConsumer final : public nsIInputStreamCallback,
   Vector<uint8_t> mOptimizedEncodingBytes;
   JS::StreamConsumer* mConsumer;
   bool mConsumerAborted;
+  UniquePtr<apiaudit::StreamCapture> mAudit;
 
   JSStreamConsumer(already_AddRefed<WindowStreamOwner> aWindowStreamOwner,
                    nsISerialEventTarget* aStreamTarget,
@@ -488,6 +490,9 @@ class JSStreamConsumer final : public nsIInputStreamCallback,
         return NS_ERROR_UNEXPECTED;
       }
     } else {
+      if (self->mAudit) {
+        self->mAudit->Append((const uint8_t*)aFromSegment, aCount);
+      }
       // This callback can be called on any thread which is explicitly allowed
       // by this particular JS API call.
       if (!self->mConsumer->consumeChunk((const uint8_t*)aFromSegment,
@@ -507,7 +512,8 @@ class JSStreamConsumer final : public nsIInputStreamCallback,
   static bool Start(nsCOMPtr<nsIInputStream> aStream, nsIGlobalObject* aGlobal,
                     WorkerPrivate* aMaybeWorker, JS::StreamConsumer* aConsumer,
                     nsMainThreadPtrHandle<nsICacheInfoChannel>&& aCache,
-                    bool aOptimizedEncoding) {
+                    bool aOptimizedEncoding,
+                    UniquePtr<apiaudit::StreamCapture> aAudit) {
     nsCOMPtr<nsIAsyncInputStream> asyncStream;
     nsresult rv = NS_MakeAsyncNonBlockingInputStream(
         aStream.forget(), getter_AddRefs(asyncStream));
@@ -542,6 +548,8 @@ class JSStreamConsumer final : public nsIInputStreamCallback,
           new JSStreamConsumer(owner.forget(), streamTarget, aGlobal, aConsumer,
                                std::move(aCache), aOptimizedEncoding);
     }
+
+    consumer->mAudit = std::move(aAudit);
 
     // This AsyncWait() creates a ref-cycle between asyncStream and consumer:
     //
@@ -588,6 +596,10 @@ class JSStreamConsumer final : public nsIInputStreamCallback,
         // an optimized encoding so we can store it in the alt data. By JS API
         // contract, the compilation process will hold a refcount to 'this'
         // until it's done, optionally calling storeOptimizedEncoding().
+        if (mAudit) {
+          mAudit->Finish();
+          mAudit = nullptr;
+        }
         mConsumer->streamEnd(mCache ? this : nullptr);
       }
       return NS_OK;
@@ -749,10 +761,12 @@ bool FetchUtil::StreamResponseToJS(JSContext* aCx, JS::Handle<JSObject*> aObj,
     return ThrowException(aCx, JSMSG_WASM_RESPONSE_ALREADY_CONSUMED);
   }
 
+  nsAutoCString responseURL;
   switch (aMimeType) {
     case JS::MimeType::Wasm:
       nsAutoCString url;
       response->GetUrl(url);
+      responseURL = url;
 
       IgnoredErrorResult result;
       nsCString sourceMapUrl;
@@ -819,8 +833,14 @@ bool FetchUtil::StreamResponseToJS(JSContext* aCx, JS::Handle<JSObject*> aObj,
 
   nsIGlobalObject* global = xpc::NativeGlobal(js::UncheckedUnwrap(aObj));
 
+  UniquePtr<apiaudit::StreamCapture> audit;
+  if (!optimizedEncoding) {
+    audit = apiaudit::StreamCapture::Create(aCx, "wasm", responseURL);
+  }
+
   if (!JSStreamConsumer::Start(stream, global, aMaybeWorker, aConsumer,
-                               std::move(cache), optimizedEncoding)) {
+                               std::move(cache), optimizedEncoding,
+                               std::move(audit))) {
     return ThrowException(aCx, JSMSG_OUT_OF_MEMORY);
   }
 

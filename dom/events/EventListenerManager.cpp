@@ -12,6 +12,7 @@
 #include "js/EnvironmentChain.h"  // JS::EnvironmentChain
 #include "js/loader/LoadedScript.h"
 #include "js/loader/ScriptFetchOptions.h"
+#include "mozilla/ApiAuditScripts.h"
 #include "mozilla/Assertions.h"
 #include "mozilla/BasicEvents.h"
 #include "mozilla/BinarySearch.h"
@@ -1242,6 +1243,11 @@ nsresult EventListenerManager::CompileEventHandlerInternal(
 
   JS::Rooted<JSObject*> target(cx, &v.toObject());
   JSAutoRealm ar(cx, target);
+
+  apiaudit::RecordCodeText(
+      cx, "event-handler",
+      nsPrintfCString("%s %s", url.get(), nsAtomCString(attrName).get()),
+      *body);
 
   // Now that we've entered the realm we actually care about, create our
   // environment chain.  Note that we start with |element|, not aElement,

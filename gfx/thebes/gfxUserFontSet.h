@@ -313,6 +313,12 @@ class gfxUserFontSet {
   // check whether content policies allow the given URI to load.
   virtual bool IsFontLoadAllowed(const gfxFontFaceSrc&) = 0;
 
+  // Called after a src: local() lookup, which pages use to probe for
+  // installed fonts. May be called off the main thread.
+  virtual void RecordLocalFontLookup(const nsACString& aLocalName,
+                                     const nsACString& aFamilyName,
+                                     bool aFound) {}
+
   // initialize the process that loads external font data, which upon
   // completion will call FontDataDownloadComplete method
   virtual nsresult StartLoad(gfxUserFontEntry* aUserFontEntry,

@@ -131,10 +131,20 @@ class WorkerDescriptorActorList {
     }
 
     // Delete each actor for which we don't have a debugger.
-    for (const [dbg] of this._actors) {
-      if (!dbgs.has(dbg)) {
-        this._actors.delete(dbg);
+    for (const [dbg, actor] of this._actors) {
+      if (dbgs.has(dbg) || actor._terminated) {
+        continue;
       }
+      let isClosed = true;
+      try {
+        isClosed = dbg.isClosed;
+      } catch (e) {}
+      if (isClosed && actor._shouldRetainTerminated()) {
+        actor._terminated = true;
+        actor._detach();
+        continue;
+      }
+      this._actors.delete(dbg);
     }
 
     // Create an actor for each debugger for which we don't have one.
