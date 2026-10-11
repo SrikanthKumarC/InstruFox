@@ -1,6 +1,6 @@
-# Web Instrumentation Browser
+# InstruFox
 
-A research browser built on the Firefox (Gecko) source tree that records what
+InstruFox is a research browser built on the Firefox (Gecko) source tree that records what
 websites do inside the browser: every Web API they call and what it returned,
 the code they run (including code generated at runtime and code hidden in
 blob: and data: workers), the CSS conditions they probe, and every network
@@ -26,7 +26,7 @@ claims to do:
   compare sites, browsers or page versions.
 
 This is not an official Mozilla product and is not affiliated with or endorsed
-by Mozilla. It uses Firefox's unofficial "Nightly" branding.
+by Mozilla, and doesn't use Firefox branding.
 
 > **Privacy note:** the browser records request and response headers, request
 > bodies, cookies and argument values, which can include passwords, tokens and
@@ -67,17 +67,18 @@ DevTools is open. While `privacy.apiaudit.hideDevTools` is on (the default):
 
 ## Install (Linux x86_64)
 
-Download `web-instrumentation-browser-<version>-linux-x86_64.tar.xz` from the
-[Releases](../../releases) page, then:
+Download `InstruFox-<version>-linux-x86_64.tar.xz` from the
+[Releases](https://github.com/SrikanthKumarC/InstruFox/releases) page, then:
 
 ```sh
-tar -xJf web-instrumentation-browser-*-linux-x86_64.tar.xz
-./firefox/firefox --profile "$(mktemp -d)"
+tar -xJf InstruFox-*-linux-x86_64.tar.xz
+./instrufox/instrufox --profile "$(mktemp -d)"
 ```
 
-The `--profile` flag starts it with a fresh, throwaway profile so it doesn't
-touch your regular Firefox profile. It needs the same system libraries as
-Firefox (GTK 3). Only Linux x86_64 builds are published for now.
+InstruFox keeps its profiles in `~/.config/mozilla/instrufox`, apart from
+Firefox's. The `--profile` flag above goes further and starts it with a
+throwaway profile, so every session begins clean. It needs the same system
+libraries as Firefox (GTK 3). Only Linux x86_64 builds are published for now.
 
 ## Using it
 
@@ -138,13 +139,14 @@ changed, is in
 This repository is a fork of
 [mozilla-firefox/firefox](https://github.com/mozilla-firefox/firefox); the
 instrumentation is in the commits on top of upstream `main`. Building works
-the same as for Firefox:
+the same as for Firefox, plus the InstruFox branding in your `mozconfig`:
 
 ```sh
+echo '. "$topsrcdir/browser/branding/instrufox/mozconfig"' >> mozconfig
 ./mach bootstrap   # once, choose "Firefox for Desktop"
 ./mach build
 ./mach run
-./mach package     # produces obj-*/dist/firefox-*.tar.xz
+./mach package     # produces obj-*/dist/instrufox-*.tar.xz
 ```
 
 See the
@@ -154,6 +156,29 @@ for requirements. Tests for the instrumentation:
 ```sh
 ./mach test toolkit/components/apiaudit/tests/browser/ --headless
 ```
+
+## Contributing
+
+Issues and pull requests about InstruFox are welcome: bugs in what it
+records or how it shows it, APIs or code paths it misses, ranking and
+categories, DevTools-detection techniques it doesn't defeat yet, the
+export formats, documentation, and packaging.
+
+- **Issues:** open them in this repository's
+  [issue tracker](https://github.com/SrikanthKumarC/InstruFox/issues). Include the InstruFox version, the page or a
+  minimal test case, and what was recorded versus what you expected.
+- **Pull requests:** most of the code is in `toolkit/components/apiaudit/`;
+  its [README](toolkit/components/apiaudit/README.md) lists every place
+  outside that directory that InstruFox changes. Keep changes outside it as
+  small as possible so rebasing on upstream stays easy, and add or update a
+  test in `toolkit/components/apiaudit/tests/browser/`.
+
+**Firefox bugs don't belong here.** If a problem also happens in a regular
+Firefox or Firefox Nightly build, it is a Firefox bug: report it to Mozilla
+on [Bugzilla](https://bugzilla.mozilla.org/) instead. If you aren't sure,
+try to reproduce it in
+[Firefox Nightly](https://www.mozilla.org/firefox/channel/desktop/#nightly)
+first. Please don't report InstruFox problems to Mozilla either.
 
 ## License
 

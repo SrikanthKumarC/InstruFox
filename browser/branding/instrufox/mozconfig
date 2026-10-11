@@ -1,0 +1,2 @@
+ac_add_options --with-branding=browser/branding/instrufox
+ac_add_options --with-app-basename=InstruFox
