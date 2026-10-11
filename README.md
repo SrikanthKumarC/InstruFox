@@ -12,6 +12,12 @@ Firefox changes every week, so it keeps up with new web platform features,
 bug fixes and security fixes. It is an independent project, not affiliated
 with or endorsed by Mozilla.
 
+![InstruFox's API Audit window after loading the CreepJS fingerprinting test page. 441 APIs are ranked by risk, led by WebGL, canvas, WebRTC and audio fingerprinting.](docs/readme/instrufox/api-view.png)
+
+*The API Audit window after loading the
+[CreepJS](https://abrahamjuliot.github.io/creepjs/) fingerprinting test
+page: 441 distinct APIs, ranked by risk and grouped by category.*
+
 ## Who it's for
 
 Anyone who needs to see what a page actually does, not what it claims to do:
@@ -108,11 +114,14 @@ To hear when a new platform is available, watch this repository and choose
 
 ## Getting started
 
-1. Click the **API Audit** button in the toolbar. If you don't see it, add it
-   from *Customize Toolbar*.
-2. Click **Start**, then load the page you want to study. **Stop** pauses
-   recording and keeps what was recorded, **Resume** continues, and **Clear**
-   deletes everything.
+1. Click the **API Audit** button in the toolbar, next to the extensions
+   button. If you don't see it, add it from *Customize Toolbar*.
+
+   ![The API Audit button in the InstruFox toolbar](docs/readme/instrufox/toolbar-button.png)
+
+2. Click **Start**, then load the page you want to study. While recording,
+   **Restart** clears what was recorded and starts over, **Stop** pauses and
+   keeps the data, **Resume** continues, and **Clear** deletes everything.
 3. In the sidebar, pick a tab, page load, frame or worker to see what it and
    everything inside it did:
    - **APIs** lists every API used, highest risk first. Expand a row to see
@@ -121,8 +130,12 @@ To hear when a new platform is available, watch this repository and choose
      data: workers, runtime-generated code and anti-debugging code flagged.
    - **Network** lists requests, cookie changes and the content blocking log.
      Click a request to see its headers, body and classification.
-4. To export, use **Copy all** for a full JSON report of the selected page,
-   or **Copy summary** for a Markdown overview grouped by category, with the
+
+   Use the filter box to search APIs, origins and scripts, and the **Min
+   score** slider to hide low-risk APIs (below 30 by default).
+4. To export, use **Export JSON** to save the full report of the selected
+   page to your Downloads folder, **Copy all** to copy the same report to the clipboard, or
+   **Copy summary** for a Markdown overview grouped by category, with the
    captured code and the hosts the page contacted.
 
 ### Preferences
