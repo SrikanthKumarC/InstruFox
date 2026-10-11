@@ -1,188 +1,201 @@
 # InstruFox
 
-InstruFox is a research browser built on the Firefox (Gecko) source tree that records what
-websites do inside the browser: every Web API they call and what it returned,
-the code they run (including code generated at runtime and code hidden in
-blob: and data: workers), the CSS conditions they probe, and every network
-request and cookie they produce. Everything is grouped per tab, frame and
-worker, ranked by privacy risk, and exportable as JSON or Markdown.
+InstruFox is a web browser for research. It shows you everything a website
+does inside the browser: every Web API it calls and what came back, the code
+it runs (including code generated at runtime or hidden in short-lived
+workers), the CSS conditions it probes, and every network request and cookie
+it produces. Results are grouped by tab, frame and worker, ranked by privacy
+risk, and can be exported as JSON or Markdown.
 
-It is meant for people who need to see exactly what a page does, not what it
-claims to do:
+InstruFox is built on the Firefox source code. It is an independent project,
+not affiliated with or endorsed by Mozilla.
 
-- **Browser fingerprinting research**: see which canvas, WebGL, audio, font,
-  locale, math-precision, screen, sensor and hardware APIs a script reads, with
-  the actual arguments and values it got back.
-- **Tracker and ad-tech analysis**: link API reads to the network requests
-  and cookies that follow, with the tracking-protection classification of each
+## Who it's for
+
+Anyone who needs to see what a page actually does, not what it claims to do:
+
+- **Fingerprinting researchers**: see which canvas, WebGL, audio, font,
+  locale, math, screen, sensor and hardware APIs a script reads, with the
+  exact arguments it passed and the values it got back.
+- **Tracker and ad-tech analysts**: connect API reads to the network requests
+  and cookies that follow, along with how tracking protection classified each
   request.
-- **Anti-bot and anti-fraud script analysis**: capture the code those scripts
-  generate at runtime (`eval`, `Function`, string timers, WebAssembly), including
-  code that only exists inside short-lived workers.
-- **Malicious JavaScript and obfuscation studies**: recover deobfuscated code
-  as it is compiled, flag anti-debugging tricks, and keep DevTools hidden from
-  pages that try to detect it.
-- **Web measurement**: export a complete, structured per-page report to
-  compare sites, browsers or page versions.
+- **Anti-bot and anti-fraud analysts**: capture the code these scripts build
+  at runtime with `eval`, `Function`, string timers and WebAssembly, including
+  code that only runs inside workers that exit right away.
+- **Security researchers studying malicious or obfuscated JavaScript**: get
+  the deobfuscated code as the browser compiles it, spot anti-debugging
+  tricks, and keep DevTools hidden from pages that look for it.
+- **Web measurement studies**: export a complete, structured report per page
+  to compare sites, browsers or versions of a page.
 
-This is not an official Mozilla product and is not affiliated with or endorsed
-by Mozilla, and doesn't use Firefox branding.
-
-> **Privacy note:** the browser records request and response headers, request
+> **Privacy note:** InstruFox records request and response headers, request
 > bodies, cookies and argument values, which can include passwords, tokens and
-> other personal data. Use a separate profile for research, and review any
-> report before sharing it.
+> other personal data. Don't browse with your personal accounts in it, and
+> check reports before you share them.
 
 ## What it records
 
 | Area | What is captured |
 | --- | --- |
-| Web APIs | Every WebIDL method, getter, setter and constructor that web content calls, in every content process and in dedicated, shared and service workers: call counts, arguments, results (including what promises resolve or reject with), exceptions, and the calling script `url:line:col`. |
-| JS builtins | The builtins that reveal time zone, locale and floating-point behavior: `Date` time zone methods, every `Intl.*.resolvedOptions()`, `Intl.supportedValuesOf()`, `Temporal.Now.timeZoneId()`, and the transcendental `Math` functions. |
-| Code | Inline and external `<script>`, module scripts, worker and `importScripts()` sources (blob: and data: included), `eval()` / `Function()` strings, string `setTimeout()` / `setInterval()`, inline event handlers, `javascript:` URLs, and WebAssembly module bytes (savable as `.wasm`). |
-| CSS | `@media`, `@supports` and `@import` conditions in author stylesheets with whether they matched, and `src: local()` font lookups with whether the font was found. |
-| Network | Every request made for web content: URL, method, type, status, request and response headers, request body, remote address, and tracking-protection classification. Also every cookie change and each tab's content blocking log. |
-| Anti-debugging | Code containing `debugger` statements is flagged and every compilation of it is recorded. |
+| Web APIs | Every method, getter, setter and constructor that a page calls, in the page itself and in dedicated, shared and service workers: how often, with which arguments, what it returned (including what promises resolve or reject with), any exception, and the calling script as `url:line:col`. |
+| JavaScript builtins | The builtins that reveal time zone, locale and floating-point behavior: the `Date` time zone methods, every `Intl.*.resolvedOptions()`, `Intl.supportedValuesOf()`, `Temporal.Now.timeZoneId()` and the transcendental `Math` functions. |
+| Code | Inline and external `<script>`, module scripts, worker and `importScripts()` sources (including blob: and data: URLs), `eval()` and `Function()` strings, string `setTimeout()` and `setInterval()`, inline event handlers, `javascript:` URLs, and WebAssembly modules, which you can save as `.wasm` files. |
+| CSS | `@media`, `@supports` and `@import` conditions in page stylesheets and whether they matched, and `src: local()` font lookups and whether the font was found. |
+| Network | Every request a page makes: URL, method, type, status, request and response headers, request body, remote address and tracking protection classification. Also every cookie change and each tab's content blocking log. |
+| Anti-debugging | Code that contains `debugger` statements is flagged, and each time such code is compiled it is recorded. |
 
-Each API gets a score from 0 (noise) to 100 and a category: canvas, WebGL /
-WebGPU, audio, fonts, device and browser properties, time zone and locale, math
-precision, screen geometry, media devices, sensors, network / WebRTC leaks,
-storage and identifiers, permission probing, crypto, timing side channels, CSS
-media queries, clipboard, navigation, workers, dynamic code and anti-debugging.
-Some scores depend on the argument; for example `getParameter(37446)` is
-`UNMASKED_RENDERER_WEBGL` and ranks high.
+Every API gets a risk score from 0 (harmless) to 100 and a category: canvas,
+WebGL / WebGPU, audio, fonts, device and browser properties, time zone and
+locale, math precision, screen geometry, media devices, sensors, network /
+WebRTC leaks, storage and identifiers, permission probing, crypto, timing side
+channels, CSS media queries, clipboard, navigation, workers, dynamic code and
+anti-debugging. Some scores depend on the arguments: for example,
+`getParameter(37446)` asks for the real graphics card name
+(`UNMASKED_RENDERER_WEBGL`) and ranks high.
 
 ### Hiding DevTools from pages
 
-Many scripts change their behavior, or stop running, when they detect that
-DevTools is open. While `privacy.apiaudit.hideDevTools` is on (the default):
+Many scripts behave differently, or stop working, when they notice DevTools
+is open. InstruFox counters the common tricks:
 
-- pausing on `debugger;` statements is off by default and the toolbox opens in
-  a separate window, so debugger-timing and viewport-size checks see nothing;
-- console calls serialize their arguments one event loop turn later, so timing
-  `console.log` / `console.table` no longer reveals DevTools;
-- blob: and data: workers that close themselves stay listed in DevTools as
-  terminated, so a page can't hide code by running it in a worker that exits
-  immediately.
+- Pausing on `debugger;` statements is off, and DevTools opens in its own
+  window, so pages can't detect it by timing `debugger` or by watching the
+  window shrink.
+- Console calls take the same time whether or not DevTools is open, so
+  timing `console.log` or `console.table` gives nothing away.
+- Workers loaded from blob: and data: URLs stay listed in DevTools after they
+  exit, so a page can't hide code in a worker that closes itself immediately.
+
+You can turn all of this off with the `privacy.apiaudit.hideDevTools`
+preference.
 
 ## Install (Linux x86_64)
 
 Download `InstruFox-<version>-linux-x86_64.tar.xz` from the
-[Releases](https://github.com/SrikanthKumarC/InstruFox/releases) page, then:
+[Releases](https://github.com/SrikanthKumarC/InstruFox/releases) page, then
+run:
 
 ```sh
 tar -xJf InstruFox-*-linux-x86_64.tar.xz
+./instrufox/instrufox
+```
+
+InstruFox keeps its own profile in `~/.config/mozilla/instrufox` and never
+touches your Firefox profile. To start every session from a clean slate, use
+a throwaway profile instead:
+
+```sh
 ./instrufox/instrufox --profile "$(mktemp -d)"
 ```
 
-InstruFox keeps its profiles in `~/.config/mozilla/instrufox`, apart from
-Firefox's. The `--profile` flag above goes further and starts it with a
-throwaway profile, so every session begins clean. It needs the same system
-libraries as Firefox (GTK 3). Only Linux x86_64 builds are published for now.
+It needs the same system libraries as Firefox, such as GTK 3. Only Linux
+x86_64 builds are available for now. InstruFox doesn't update itself; check
+the Releases page for new versions.
 
-## Using it
+## Getting started
 
-1. Click the **API Audit** toolbar button. If it isn't shown, add it with
-   *Customize Toolbar*, or open the window from the Browser Console:
-   ```js
-   ChromeUtils.importESModule("moz-src:///toolkit/components/apiaudit/ApiAudit.sys.mjs").ApiAudit.openWindow()
-   ```
-2. Press **Start** to clear previous data and record from now on, then load the
-   page you want to study. **Stop** pauses and keeps the data, **Resume**
-   continues, **Clear** forgets everything.
-3. The sidebar groups records by tab, page load, frame and worker. Select any
-   level to see everything below it.
-   - **APIs** lists every API ranked by risk; expand a row to see its distinct
-     calls with arguments, results and calling scripts.
-   - **Code** lists all captured code; blob:/data: workers, dynamic code and
-     anti-debugging code are flagged.
-   - **Network** lists requests, cookie changes and the content blocking log;
-     click a request for its headers, body and classification.
-4. Export with **Copy all** (full JSON report of the selected page) or
-   **Copy summary** (Markdown overview grouped by category, with contexts,
-   captured code and hosts contacted).
+1. Click the **API Audit** button in the toolbar. If you don't see it, add it
+   from *Customize Toolbar*.
+2. Click **Start**, then load the page you want to study. **Stop** pauses
+   recording and keeps what was recorded, **Resume** continues, and **Clear**
+   deletes everything.
+3. In the sidebar, pick a tab, page load, frame or worker to see what it and
+   everything inside it did:
+   - **APIs** lists every API used, highest risk first. Expand a row to see
+     each distinct call with its arguments, result and calling script.
+   - **Code** lists the code that was captured, with code from blob: and
+     data: workers, runtime-generated code and anti-debugging code flagged.
+   - **Network** lists requests, cookie changes and the content blocking log.
+     Click a request to see its headers, body and classification.
+4. To export, use **Copy all** for a full JSON report of the selected page,
+   or **Copy summary** for a Markdown overview grouped by category, with the
+   captured code and the hosts the page contacted.
 
 ### Preferences
 
-Set these in `about:config`:
+You can change these in `about:config`:
 
-| Pref | Default | Meaning |
+| Preference | Default | What it does |
 | --- | --- | --- |
-| `privacy.apiaudit.enabled` | `true` | Record at all. |
-| `privacy.apiaudit.hideDevTools` | `true` | Apply the DevTools-hiding measures above. |
-| `privacy.apiaudit.maxCodeLength` | `524288` | Characters kept per captured code entry. |
-| `privacy.apiaudit.retainSeconds` | `600` | How long records of closed windows are kept. |
+| `privacy.apiaudit.enabled` | `true` | Turns recording on or off. |
+| `privacy.apiaudit.hideDevTools` | `true` | Hides DevTools from pages, as described above. |
+| `privacy.apiaudit.maxCodeLength` | `524288` | Maximum number of characters kept for each piece of captured code. |
+| `privacy.apiaudit.retainSeconds` | `600` | How long, in seconds, data from closed tabs is kept. |
 
-For a raw log, start the browser with `MOZ_LOG=ApiAudit:3` (first use of each
-API per window) or `MOZ_LOG=ApiAudit:5` (every sampled call).
+To also get a plain-text log in the terminal, start InstruFox with
+`MOZ_LOG=ApiAudit:3` (first use of each API per page) or `MOZ_LOG=ApiAudit:5`
+(every recorded call).
 
 ## Limitations
 
-- Call counts are lower bounds for builtins and getters that the JIT inlines
-  or serves from a cached slot; every calling script is still seen.
-- JS builtins other than the ones listed above (for example
-  `Function.prototype.toString` or `Error.prototype.stack`) are not recorded.
-- Values are described without running page script, so DOM objects appear
-  only as their class name.
-- Container queries and other conditions evaluated during selector matching
-  are not recorded.
-- A page that measures event-loop lag while making heavy console calls, or
-  that notices the general slowdown of an attached debugger, can still detect
-  DevTools.
-
-The full technical description, including every place the Gecko source was
-changed, is in
-[toolkit/components/apiaudit/README.md](toolkit/components/apiaudit/README.md).
+- For heavily optimized code, call counts of some builtins and getters are
+  lower than the real number, because the JavaScript engine can skip them
+  after the first calls. Every script that calls them is still listed.
+- JavaScript builtins other than the ones listed above, such as
+  `Function.prototype.toString` or `Error.prototype.stack`, are not recorded.
+- Page objects passed as arguments are shown only by their type (for example
+  `HTMLCanvasElement`), because describing them in more detail would mean
+  running page code.
+- Container queries and other conditions checked while matching CSS
+  selectors are not recorded.
+- A page can still detect DevTools by measuring how much it slows down
+  overall while the debugger is attached, or by flooding the console and
+  measuring event loop delays.
 
 ## Building from source
 
-This repository is a fork of
-[mozilla-firefox/firefox](https://github.com/mozilla-firefox/firefox); the
-instrumentation is in the commits on top of upstream `main`. Building works
-the same as for Firefox, plus the InstruFox branding in your `mozconfig`:
+InstruFox is a fork of
+[mozilla-firefox/firefox](https://github.com/mozilla-firefox/firefox), and
+builds the same way as Firefox. See the
+[Firefox build documentation](https://firefox-source-docs.mozilla.org/setup/index.html)
+for system requirements. In a clone of this repository:
 
 ```sh
 echo '. "$topsrcdir/browser/branding/instrufox/mozconfig"' >> mozconfig
-./mach bootstrap   # once, choose "Firefox for Desktop"
+./mach bootstrap   # first time only; choose "Firefox for Desktop"
 ./mach build
 ./mach run
-./mach package     # produces obj-*/dist/instrufox-*.tar.xz
 ```
 
-See the
-[Firefox build documentation](https://firefox-source-docs.mozilla.org/setup/index.html)
-for requirements. Tests for the instrumentation:
+The first line applies the InstruFox name and branding. Without it you get
+an unbranded build named Nightly. `./mach package` creates a tarball like
+the released one in `obj-*/dist/`.
+
+To run the tests:
 
 ```sh
 ./mach test toolkit/components/apiaudit/tests/browser/ --headless
 ```
 
+[toolkit/components/apiaudit/README.md](toolkit/components/apiaudit/README.md)
+explains how the recording works and lists every change InstruFox makes to
+the Firefox source.
+
 ## Contributing
 
-Issues and pull requests about InstruFox are welcome: bugs in what it
-records or how it shows it, APIs or code paths it misses, ranking and
-categories, DevTools-detection techniques it doesn't defeat yet, the
-export formats, documentation, and packaging.
+Issues and pull requests are welcome. For example: things InstruFox records
+incorrectly or misses, risk scores and categories, DevTools detection tricks
+it doesn't handle yet, export formats, documentation and packaging.
 
-- **Issues:** open them in this repository's
-  [issue tracker](https://github.com/SrikanthKumarC/InstruFox/issues). Include the InstruFox version, the page or a
-  minimal test case, and what was recorded versus what you expected.
-- **Pull requests:** most of the code is in `toolkit/components/apiaudit/`;
-  its [README](toolkit/components/apiaudit/README.md) lists every place
-  outside that directory that InstruFox changes. Keep changes outside it as
-  small as possible so rebasing on upstream stays easy, and add or update a
-  test in `toolkit/components/apiaudit/tests/browser/`.
+- **Issues:** use the
+  [issue tracker](https://github.com/SrikanthKumarC/InstruFox/issues).
+  Include your InstruFox version, the page or a small test case, and what was
+  recorded compared to what you expected.
+- **Pull requests:** most of the code is in `toolkit/components/apiaudit/`.
+  Keep changes elsewhere in the Firefox source as small as you can, so
+  InstruFox stays easy to update to newer Firefox versions, and add or update
+  a test in `toolkit/components/apiaudit/tests/browser/`.
 
-**Firefox bugs don't belong here.** If a problem also happens in a regular
-Firefox or Firefox Nightly build, it is a Firefox bug: report it to Mozilla
-on [Bugzilla](https://bugzilla.mozilla.org/) instead. If you aren't sure,
-try to reproduce it in
+**Firefox bugs belong with Mozilla, not here.** If a problem also happens in
+regular Firefox, report it on [Bugzilla](https://bugzilla.mozilla.org/). If
+you aren't sure, try to reproduce it in
 [Firefox Nightly](https://www.mozilla.org/firefox/channel/desktop/#nightly)
-first. Please don't report InstruFox problems to Mozilla either.
+first. Likewise, please don't report InstruFox problems to Mozilla.
 
 ## License
 
-The source is licensed under the
+InstruFox is licensed under the
 [Mozilla Public License 2.0](https://www.mozilla.org/MPL/2.0/), like Firefox.
-Firefox and the Firefox logos are trademarks of the Mozilla Foundation; this
-project doesn't use them and isn't endorsed by Mozilla.
+Firefox and the Firefox logos are trademarks of the Mozilla Foundation and are
+not used by this project.
