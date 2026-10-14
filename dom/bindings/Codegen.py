@@ -9642,7 +9642,10 @@ class CGPerSignatureCall(CGThing):
         elif getter:
             return CGGeneric(apiAuditGetterGuard(name))
         elif setter:
-            call = "mozilla::apiaudit::RecordSetter(cx, %s, args[0]);" % name
+            return CGGeneric(
+                "mozilla::apiaudit::AutoRecordSetter<std::remove_cvref_t<decltype(args)>> "
+                "apiAuditGuard(cx, %s, args);\n" % name
+            )
         else:
             return CGGeneric(
                 "mozilla::apiaudit::AutoRecordMethod<std::remove_cvref_t<decltype(args)>> "

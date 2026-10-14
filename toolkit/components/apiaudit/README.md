@@ -12,7 +12,7 @@ ranked by privacy risk.
 Everything lives in this directory except:
 
 - `dom/bindings/Codegen.py`: `CGPerSignatureCall.apiAuditCall` emits a
-  recorder (`AutoRecordMethod`, `AutoRecordGetter`, `RecordSetter` or
+  recorder (`AutoRecordMethod`, `AutoRecordGetter`, `AutoRecordSetter` or
   `RecordKey`) at the top of every generated binding member and named or
   indexed property operation, `CGSpecializedGetter` emits the getter recorder
   before the cached-slot early return, and `mozilla/ApiAudit.h` is added to

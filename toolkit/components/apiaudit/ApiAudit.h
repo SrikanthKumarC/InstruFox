@@ -46,9 +46,6 @@ void AddCallArg(CallSample* aSample, JS::Handle<JS::Value> aArg);
 void EndCall(CallSample* aSample, JS::Handle<JS::Value> aResult,
              bool aHasResult);
 
-void RecordSetter(JSContext* aCx, const char* aName,
-                  JS::Handle<JS::Value> aValue);
-
 // Named and indexed property operations. aValue is the value being assigned,
 // or undefined for getters and deleters.
 void RecordKey(JSContext* aCx, const char* aName, uint32_t aIndex,
@@ -99,6 +96,28 @@ class MOZ_RAII AutoRecordGetter {
 
  private:
   Args& mArgs;
+  CallSample* mSample;
+};
+
+// Records an attribute assignment with the value assigned and the exception
+// the conversion or the setter threw, if any, when the setter returns.
+template <typename Args>
+class MOZ_RAII AutoRecordSetter {
+ public:
+  AutoRecordSetter(JSContext* aCx, const char* aName, Args& aArgs)
+      : mSample(IsEnabled() ? BeginCall(aCx, aName, aArgs[0], true) : nullptr) {
+    if (mSample) {
+      AddCallArg(mSample, aArgs[0]);
+    }
+  }
+
+  ~AutoRecordSetter() {
+    if (mSample) {
+      EndCall(mSample, JS::UndefinedHandleValue, false);
+    }
+  }
+
+ private:
   CallSample* mSample;
 };
 

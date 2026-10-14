@@ -20,6 +20,7 @@ const MAX_COOKIE_CHANGES = 10000;
 const MAX_HEADER_LENGTH = 4096;
 const MAX_BODY_LENGTH = 64 * 1024;
 const MAX_COOKIE_VALUE_LENGTH = 1024;
+const MAX_CONTENT_BLOCKING_LOGS = 2000;
 
 const RESPONSE_TOPICS = [
   "http-on-examine-response",
@@ -68,6 +69,68 @@ function flagNames(flags) {
   return CLASSIFICATION_FLAGS.filter(([, bit]) => flags & bit).map(
     ([name]) => name
   );
+}
+
+/**
+ * Parses a content blocking log, a JSON object mapping origins to arrays of
+ * [state, blocked, count, reason?] entries.
+ *
+ * @param {string} json
+ * @returns {Map<string, object>} The entries, by origin and state.
+ */
+function parseBlockingLog(json) {
+  let counts = new Map();
+  let log;
+  try {
+    log = JSON.parse(json || "{}");
+  } catch (e) {
+    return counts;
+  }
+  for (let [origin, items] of Object.entries(log)) {
+    for (let [state, blocked, count, ...reason] of items) {
+      let key = JSON.stringify([origin, state, blocked, ...reason]);
+      let existing = counts.get(key);
+      if (existing) {
+        existing.count += count;
+      } else {
+        counts.set(key, { origin, item: [state, blocked], reason, count });
+      }
+    }
+  }
+  return counts;
+}
+
+/**
+ * Returns a copy of aBase with the counts of aOther added, or subtracted if
+ * aSign is -1. Entries left with no events are dropped.
+ */
+function combineBlockingCounts(aBase, aOther, aSign) {
+  let result = new Map();
+  for (let [key, entry] of aBase) {
+    result.set(key, { ...entry });
+  }
+  for (let [key, entry] of aOther) {
+    let existing = result.get(key);
+    if (existing) {
+      existing.count += aSign * entry.count;
+    } else if (aSign > 0) {
+      result.set(key, { ...entry });
+    }
+  }
+  for (let [key, entry] of result) {
+    if (entry.count <= 0) {
+      result.delete(key);
+    }
+  }
+  return result;
+}
+
+function blockingCountsToLog(counts) {
+  let log = {};
+  for (let { origin, item, reason, count } of counts.values()) {
+    (log[origin] ??= []).push([item[0], item[1], count, ...reason]);
+  }
+  return log;
 }
 
 function readHeaders(channel, visit) {
@@ -177,6 +240,14 @@ export const ApiAuditNetwork = {
   _requests: [],
   _byChannelId: new Map(),
   _cookies: [],
+  // Content blocking counts of each live page load, by top inner window ID, as
+  // they were when the session was last cleared or, while recording is
+  // stopped, when it was stopped.
+  _blockingBaselines: new Map(),
+  _blockingAtStop: null,
+  // What the current session has seen of each page load's content blocking
+  // log, kept after the page is gone and while recording is stopped.
+  _blockingSnapshots: new Map(),
 
   get enabled() {
     return Services.prefs.getBoolPref(ENABLED_PREF, true);
@@ -192,6 +263,10 @@ export const ApiAuditNetwork = {
       Services.obs.addObserver(this, topic);
     }
     Services.obs.addObserver(this, "xpcom-shutdown");
+    Services.prefs.addObserver(ENABLED_PREF, this);
+    if (!this.enabled) {
+      this._pauseBlockingLogs();
+    }
   },
 
   stop() {
@@ -204,15 +279,32 @@ export const ApiAuditNetwork = {
       Services.obs.removeObserver(this, topic);
     }
     Services.obs.removeObserver(this, "xpcom-shutdown");
+    Services.prefs.removeObserver(ENABLED_PREF, this);
   },
 
   clear() {
     this._requests = [];
     this._byChannelId.clear();
     this._cookies = [];
+    let live = this._liveBlockingLogs();
+    this._blockingBaselines = new Map(
+      [...live].map(([id, page]) => [id, page.counts])
+    );
+    this._blockingSnapshots.clear();
+    if (this._blockingAtStop) {
+      this._blockingAtStop = new Map(this._blockingBaselines);
+    }
   },
 
   observe(subject, topic) {
+    if (topic == "nsPref:changed") {
+      if (this.enabled) {
+        this._resumeBlockingLogs();
+      } else {
+        this._pauseBlockingLogs();
+      }
+      return;
+    }
     if (topic == "xpcom-shutdown") {
       this.stop();
       return;
@@ -311,6 +403,7 @@ export const ApiAuditNetwork = {
       time: Date.now(),
       action,
       browserId: bc?.browserId ?? 0,
+      topInnerWindowId: bc?.top?.currentWindowGlobal?.innerWindowId ?? 0,
       baseDomain: notification.baseDomain,
       thirdParty: notification.isThirdParty,
     };
@@ -335,44 +428,110 @@ export const ApiAuditNetwork = {
   },
 
   /**
-   * Returns the content blocking log of every tab: the trackers,
-   * fingerprinters and cryptominers Firefox detected or blocked.
+   * Returns the content blocking log of the current page load of every tab,
+   * with its counts parsed, by top inner window ID.
    */
-  _contentBlockingLogs() {
-    let logs = [];
+  _liveBlockingLogs() {
+    let live = new Map();
     for (let win of Services.wm.getEnumerator("navigator:browser")) {
       for (let browser of win.gBrowser?.browsers ?? []) {
         let wgp = browser.browsingContext?.currentWindowGlobal;
         if (!wgp) {
           continue;
         }
-        let log;
-        try {
-          log = JSON.parse(wgp.contentBlockingLog || "{}");
-        } catch (e) {
-          continue;
-        }
-        if (!Object.keys(log).length) {
-          continue;
-        }
-        logs.push({
+        live.set(wgp.innerWindowId, {
           browserId: browser.browserId,
           url: wgp.documentURI?.spec ?? null,
-          log,
+          counts: parseBlockingLog(wgp.contentBlockingLog),
         });
       }
     }
-    return logs;
+    return live;
+  },
+
+  /**
+   * Records what the trackers, fingerprinters and cryptominers Firefox
+   * detected or blocked since the session was cleared, for every page load.
+   *
+   * @returns {Map} The live logs that were read.
+   */
+  _updateBlockingLogs() {
+    let live = this._liveBlockingLogs();
+    for (let [id, page] of live) {
+      let counts = combineBlockingCounts(
+        page.counts,
+        this._blockingBaselines.get(id) ?? new Map(),
+        -1
+      );
+      this._blockingSnapshots.delete(id);
+      if (counts.size) {
+        this._blockingSnapshots.set(id, {
+          innerWindowId: id,
+          browserId: page.browserId,
+          url: page.url,
+          log: blockingCountsToLog(counts),
+        });
+      }
+    }
+    for (let id of this._blockingBaselines.keys()) {
+      if (!live.has(id)) {
+        this._blockingBaselines.delete(id);
+      }
+    }
+    for (let id of this._blockingSnapshots.keys()) {
+      if (this._blockingSnapshots.size <= MAX_CONTENT_BLOCKING_LOGS) {
+        break;
+      }
+      this._blockingSnapshots.delete(id);
+    }
+    return live;
+  },
+
+  _pauseBlockingLogs() {
+    let live = this._updateBlockingLogs();
+    this._blockingAtStop = new Map(
+      [...live].map(([id, page]) => [id, page.counts])
+    );
+  },
+
+  /**
+   * Leaves out of the session what happened while recording was stopped.
+   */
+  _resumeBlockingLogs() {
+    if (!this._blockingAtStop) {
+      return;
+    }
+    for (let [id, page] of this._liveBlockingLogs()) {
+      let skipped = combineBlockingCounts(
+        page.counts,
+        this._blockingAtStop.get(id) ?? new Map(),
+        -1
+      );
+      if (skipped.size) {
+        this._blockingBaselines.set(
+          id,
+          combineBlockingCounts(
+            this._blockingBaselines.get(id) ?? new Map(),
+            skipped,
+            1
+          )
+        );
+      }
+    }
+    this._blockingAtStop = null;
   },
 
   /**
    * Returns everything recorded so far.
    */
   collect() {
+    if (this.enabled) {
+      this._updateBlockingLogs();
+    }
     return {
       requests: this._requests,
       cookies: this._cookies,
-      contentBlocking: this._contentBlockingLogs(),
+      contentBlocking: [...this._blockingSnapshots.values()],
     };
   },
 };

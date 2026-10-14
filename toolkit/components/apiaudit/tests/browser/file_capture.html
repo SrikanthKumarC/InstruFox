@@ -54,6 +54,22 @@
       body: "apiaudit-body",
     });
 
+    let proto = new Proxy({}, {
+      ownKeys() {
+        window.protoTrapCalls++;
+        return [];
+      },
+    });
+    window.protoTrapCalls = 0;
+    await crypto.subtle.digest(
+      Object.setPrototypeOf({ name: "SHA-256" }, proto),
+      new Uint8Array()
+    );
+
+    try {
+      document.createElement("input").maxLength = -1;
+    } catch (e) {}
+
     document.title = "done";
   });
 </script>

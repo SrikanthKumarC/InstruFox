@@ -22,6 +22,10 @@ XPCOMUtils.defineLazyServiceGetter(
   Ci.nsIWorkerDebuggerManager
 );
 
+// Terminated workers kept in the list when privacy.apiaudit.hideDevTools is
+// on. The oldest ones are dropped beyond this many.
+const MAX_RETAINED_TERMINATED_WORKERS = 100;
+
 function matchWorkerDebugger(dbg, options) {
   if ("type" in options && dbg.type !== options.type) {
     return false;
@@ -132,7 +136,13 @@ class WorkerDescriptorActorList {
 
     // Delete each actor for which we don't have a debugger.
     for (const [dbg, actor] of this._actors) {
-      if (dbgs.has(dbg) || actor._terminated) {
+      if (dbgs.has(dbg)) {
+        continue;
+      }
+      if (actor._terminated) {
+        if (!actor._shouldRetainTerminated()) {
+          this._actors.delete(dbg);
+        }
         continue;
       }
       let isClosed = true;
@@ -144,6 +154,16 @@ class WorkerDescriptorActorList {
         actor._detach();
         continue;
       }
+      this._actors.delete(dbg);
+    }
+
+    const retained = [...this._actors].filter(
+      ([dbg, actor]) => actor._terminated && !dbgs.has(dbg)
+    );
+    for (const [dbg] of retained.slice(
+      0,
+      Math.max(0, retained.length - MAX_RETAINED_TERMINATED_WORKERS)
+    )) {
       this._actors.delete(dbg);
     }
 
