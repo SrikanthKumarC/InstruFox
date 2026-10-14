@@ -669,7 +669,7 @@ static void DescribePlainObject(JSContext* aCx, JS::Handle<JSObject*> aObj,
     return;
   }
   JS::Rooted<JS::IdVector> ids(aCx, JS::IdVector(aCx));
-  if (!JS_Enumerate(aCx, aObj, &ids)) {
+  if (!js::GetPropertyKeys(aCx, aObj, JSITER_OWNONLY, &ids)) {
     JS_ClearPendingException(aCx);
     aOut.AppendLiteral("{?}");
     return;
@@ -1281,14 +1281,6 @@ void EndCall(CallSample* aSample, JS::Handle<JS::Value> aResult,
       JS_IsExceptionPending(cx) && JS_GetPendingException(cx, &exception);
   JS::AutoSaveExceptionState savedException(cx);
   FinishCall(aSample, aResult, aHasResult, exception, threw);
-}
-
-void RecordSetter(JSContext* aCx, const char* aName,
-                  JS::Handle<JS::Value> aValue) {
-  if (CallSample* sample = BeginCall(aCx, aName, aValue, true)) {
-    AddCallArg(sample, aValue);
-    EndCall(sample, JS::UndefinedHandleValue, false);
-  }
 }
 
 static void RecordKeyDesc(JSContext* aCx, const char* aName,

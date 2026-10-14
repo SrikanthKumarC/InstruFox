@@ -132,6 +132,22 @@ add_task(async function test_capture() {
     is(wasm?.encoding, "base64", "WebAssembly modules are captured as base64");
     is(wasm?.text, "AGFzbQEAAAA=", "The module bytes are captured");
 
+    is(
+      await SpecialPowers.spawn(
+        browser,
+        [],
+        () => content.wrappedJSObject.protoTrapCalls
+      ),
+      0,
+      "Describing an argument does not enumerate a proxy prototype"
+    );
+    ok(
+      callsOf(apis, "HTMLInputElement.maxLength=").some(c =>
+        c.result.startsWith("threw IndexSizeError")
+      ),
+      "Setters record the exception they throw"
+    );
+
     let handler = context.code.find(c => c.kind == "event-handler");
     is(
       handler?.text,
@@ -183,6 +199,41 @@ add_task(async function test_capture() {
         c => c.name == "apiaudit" && c.value == "1" && c.action == "added"
       ),
       "Cookie changes are recorded"
+    );
+  });
+});
+
+add_task(async function test_cookies_attributed_to_page_load() {
+  await ApiAudit.clear();
+  await BrowserTestUtils.withNewTab("about:blank", async browser => {
+    let windowIds = [];
+    for (let origin of ["https://example.com", "https://example.org"]) {
+      let previous = browser.browsingContext.currentWindowGlobal.innerWindowId;
+      BrowserTestUtils.startLoadingURIString(
+        browser,
+        TEST_PAGE.replace("https://example.com", origin)
+      );
+      await BrowserTestUtils.browserLoaded(browser);
+      await TestUtils.waitForCondition(
+        () =>
+          browser.contentTitle == "done" &&
+          browser.browsingContext.currentWindowGlobal.innerWindowId != previous,
+        "Waiting for the page to finish probing"
+      );
+      windowIds.push(browser.browsingContext.currentWindowGlobal.innerWindowId);
+    }
+    let { cookies } = ApiAudit.collectNetwork();
+    let cookieOf = host =>
+      cookies.find(c => c.name == "apiaudit" && c.host.endsWith(host));
+    is(
+      cookieOf("example.com")?.topInnerWindowId,
+      windowIds[0],
+      "The first cookie belongs to the first page load"
+    );
+    is(
+      cookieOf("example.org")?.topInnerWindowId,
+      windowIds[1],
+      "The second cookie belongs to the second page load"
     );
   });
 });

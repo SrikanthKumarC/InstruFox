@@ -934,35 +934,50 @@ function headerValue(headers, name) {
 
 // Returns the requests, cookie changes and content blocking logs that belong
 // to a tree node: its tabs, its windows, and the workers of its sites.
+// Requests of dedicated workers carry their owner's window, so they are only
+// part of the nodes that include that window, never of a worker node alone.
 function networkFor(node) {
   let { requests, cookies, contentBlocking } = state.network;
   if (node.type == "all") {
     return { requests, cookies, contentBlocking };
   }
-  let wins = node.views.map(v => v.win);
-  let browserIds = new Set(wins.map(w => w.browserId).filter(Boolean));
-  let windowIds = new Set(
-    wins.filter(w => !w.isWorker).map(w => w.innerWindowId)
-  );
-  let documentUrls = new Set(wins.filter(w => !w.isWorker).map(w => w.url));
-  let workerSites = new Set(
-    wins.filter(w => w.isWorker).map(w => siteOf(w.url))
-  );
+  let pageWins = node.views
+    .filter(v => !v.win.isWorker && v.contexts.some(c => c.kind == "window"))
+    .map(v => v.win);
+  let workerWins = node.views.map(v => v.win).filter(w => w.isWorker);
+  let browserIds = new Set(pageWins.map(w => w.browserId).filter(Boolean));
+  let windowIds = new Set(pageWins.map(w => w.innerWindowId));
+  let documentUrls = new Set(pageWins.map(w => w.url));
+  let pageIds = new Set(pageWins.map(pageKey));
+  let pageSites = new Set(pageWins.map(w => siteOf(topUrlOf(w))));
+  let workerSites = new Set(workerWins.map(w => siteOf(w.url)));
   let fromWorkerSite = r =>
     !r.browserId && workerSites.has(siteOf(r.triggeringOrigin));
-  let matchRequest =
-    node.type == "group"
-      ? r => browserIds.has(r.browserId) || fromWorkerSite(r)
-      : r =>
-          windowIds.has(r.innerWindowId) ||
-          (["document", "subdocument"].includes(r.type) &&
-            browserIds.has(r.browserId) &&
-            documentUrls.has(r.url)) ||
-          fromWorkerSite(r);
+  let isGroup = node.type == "group";
+  let matchRequest = isGroup
+    ? r => browserIds.has(r.browserId) || fromWorkerSite(r)
+    : r =>
+        windowIds.has(r.innerWindowId) ||
+        (["document", "subdocument"].includes(r.type) &&
+          browserIds.has(r.browserId) &&
+          documentUrls.has(r.url)) ||
+        fromWorkerSite(r);
+  // A tab keeps its browser ID across navigations, so the cookies of a page
+  // load are told apart by the top-level document that was current when they
+  // changed, and a first-party cookie must belong to that document's site.
+  let matchCookie = isGroup
+    ? c => browserIds.has(c.browserId)
+    : c =>
+        pageIds.has(String(c.topInnerWindowId)) &&
+        (c.thirdParty || !c.baseDomain || pageSites.has(c.baseDomain));
   return {
     requests: requests.filter(matchRequest),
-    cookies: cookies.filter(c => browserIds.has(c.browserId)),
-    contentBlocking: contentBlocking.filter(l => browserIds.has(l.browserId)),
+    cookies: cookies.filter(matchCookie),
+    contentBlocking: contentBlocking.filter(l =>
+      isGroup
+        ? browserIds.has(l.browserId)
+        : pageIds.has(String(l.innerWindowId))
+    ),
   };
 }
 

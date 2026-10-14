@@ -123,3 +123,36 @@ add_task(async function test_blob_worker_not_retained_without_pref() {
   BrowserTestUtils.removeTab(tab);
   await SpecialPowers.popPrefEnv();
 });
+
+add_task(async function test_retained_worker_dropped_when_pref_disabled() {
+  await SpecialPowers.pushPrefEnv({
+    set: [["privacy.apiaudit.hideDevTools", true]],
+  });
+
+  const client = await spawnLocalClient();
+  const tab = await BrowserTestUtils.openNewForegroundTab({
+    gBrowser,
+    url: TEST_PAGE,
+  });
+
+  await TestUtils.waitForCondition(async () => {
+    const { workers } = await client.mainRoot.listWorkers();
+    return workers.some(
+      w => w.url && w.url.startsWith("blob:") && w.traits?.isTerminated
+    );
+  }, "Waiting for the terminated blob worker descriptor to be retained");
+
+  await SpecialPowers.pushPrefEnv({
+    set: [["privacy.apiaudit.hideDevTools", false]],
+  });
+  const { workers } = await client.mainRoot.listWorkers();
+  ok(
+    !workers.some(w => w.traits?.isTerminated),
+    "Disabling the pref drops the retained terminated descriptors"
+  );
+
+  await client.close();
+  BrowserTestUtils.removeTab(tab);
+  await SpecialPowers.popPrefEnv();
+  await SpecialPowers.popPrefEnv();
+});
